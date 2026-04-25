@@ -6,6 +6,7 @@ Code Explainer opens a source file beside a generated English explanation. The s
 
 - `Code Explainer: Explain Current File`
 - `Code Explainer: Refresh Explanation`
+- `Code Explainer: Set OpenAI Model`
 - `Code Explainer: Set Explanation Level`
 - `Code Explainer: Toggle Review Mode`
 - `Code Explainer: Clear Cache`
@@ -18,7 +19,7 @@ Code Explainer opens a source file beside a generated English explanation. The s
 - `Code Explainer: Set OpenAI API Key`
 - `Code Explainer: Clear OpenAI API Key`
 
-When an explanation panel is open, its top header always shows the current file, explanation level, review mode, sync offset, refresh action, and cache action. The status bar also shows the current level, review mode, and offset.
+When an explanation panel is open, its top header always shows the current model, explanation level, review mode, sync offset, refresh action, and cache action. The status bar also shows the current level and model.
 
 The fixed header helps compensate for source-editor top content such as breadcrumbs, CodeLens, or blame annotations. Because of that, `codeExplainer.syncLineOffset` now defaults to `0`; use the offset commands only if your right pane is still a line or two high/low.
 
@@ -38,9 +39,21 @@ When a saved source file has an existing in-memory explanation or snapshot, Code
 
 ## API Key
 
-Use `Code Explainer: Set OpenAI API Key` to store your key in VS Code SecretStorage. For local extension development only, the extension also reads `OPENAI_API_KEY` from `.env` in the extension folder.
+Use `Code Explainer: Set OpenAI API Key` to store your key in VS Code SecretStorage. If no key is configured, the first command that needs generation asks for one and then continues. For local extension development only, the extension also reads `OPENAI_API_KEY` from `.env` in the extension folder.
+
+`codeExplainer.model` defaults to `gpt-5.4-mini`. Use `Code Explainer: Set OpenAI Model` to pick from `codeExplainer.modelPresets` or enter a custom OpenAI model id.
 
 The `.env` file is ignored by git.
+
+## Release Builds
+
+Build VSIX packages into `release/`:
+
+```sh
+npm run package:vsix
+```
+
+The generated `.vsix` files are ignored by git and excluded from future extension packages.
 
 ## Development
 

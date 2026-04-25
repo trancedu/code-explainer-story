@@ -4,7 +4,7 @@ import { buildChunks } from './analysis/Chunker';
 import { effectiveMaxChunkLines } from './analysis/chunkLimits';
 import { resolveExplanationAnchorLine } from './analysis/explanationAnchors';
 import { renderExplanation, renderPendingExplanation } from './analysis/postProcess';
-import { getCodeExplainerConfig, setExplanationLevel, setReviewEnabled, setSyncLineOffset } from './config';
+import { getCodeExplainerConfig, setExplanationLevel, setOpenAIModel, setReviewEnabled, setSyncLineOffset } from './config';
 import { clearOpenAIKey, resolveOpenAIKey, storeOpenAIKey } from './devEnv';
 import { OpenAIClient } from './openai/OpenAIClient';
 import {
@@ -51,6 +51,7 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBarController,
     vscode.commands.registerCommand('codeExplainer.explainCurrentFile', () => explainCurrentFile(context)),
     vscode.commands.registerCommand('codeExplainer.refreshExplanation', () => explainCurrentFile(context, true)),
+    vscode.commands.registerCommand('codeExplainer.setModel', chooseOpenAIModel),
     vscode.commands.registerCommand('codeExplainer.setExplanationLevel', chooseExplanationLevel),
     vscode.commands.registerCommand('codeExplainer.toggleReviewMode', toggleReviewMode),
     vscode.commands.registerCommand('codeExplainer.clearCache', clearCache),
@@ -137,6 +138,11 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
     }
   }
 
+  const apiKey = await ensureOpenAIKey(context);
+  if (!apiKey) {
+    return;
+  }
+
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
@@ -145,15 +151,6 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
     },
     async (progress, token) => {
       progress.report({ message: 'Chunking file...' });
-      const apiKey = await resolveOpenAIKey(context);
-      if (!apiKey) {
-        const action = await vscode.window.showWarningMessage('Set an OpenAI API key before generating explanations.', 'Set Key');
-        if (action === 'Set Key') {
-          await promptForApiKey(context);
-        }
-        return;
-      }
-
       const chunkLineLimit = effectiveMaxChunkLines(config.explanationLevel, config.maxChunkLines);
       const chunks = await buildChunks(document, chunkLineLimit);
       const payload: FilePayload = {
@@ -252,6 +249,51 @@ async function openExplanation(
   updateActiveLineFromEditor(sourceEditor);
 }
 
+async function chooseOpenAIModel(): Promise<void> {
+  const config = getCodeExplainerConfig();
+  const presetModels = uniqueNonEmpty([config.model, ...config.modelPresets]);
+  const customLabel = 'Custom model id...';
+  const selected = await vscode.window.showQuickPick(
+    [
+      ...presetModels.map((model) => ({
+        label: model,
+        description: model === config.model ? 'current' : model === 'gpt-5.4-mini' ? 'default' : undefined
+      })),
+      {
+        label: customLabel,
+        description: 'Enter another OpenAI model name'
+      }
+    ],
+    {
+      title: 'Code Explainer: OpenAI Model',
+      placeHolder: 'Choose the model used for new explanations'
+    }
+  );
+
+  if (!selected) {
+    return;
+  }
+
+  let nextModel = selected.label;
+  if (nextModel === customLabel) {
+    const custom = await vscode.window.showInputBox({
+      title: 'Code Explainer: Custom OpenAI Model',
+      prompt: 'Enter an OpenAI model id.',
+      value: config.model,
+      ignoreFocusOut: true,
+      validateInput: (input) => (input.trim() ? undefined : 'Enter a non-empty model id.')
+    });
+    if (!custom) {
+      return;
+    }
+    nextModel = custom.trim();
+  }
+
+  await setOpenAIModel(nextModel);
+  refreshSettingsDisplay();
+  vscode.window.showInformationMessage(`Code Explainer model set to ${nextModel}.`);
+}
+
 async function chooseExplanationLevel(): Promise<void> {
   const levels: ExplanationLevel[] = ['concise', 'medium', 'detailed'];
   const selected = await vscode.window.showQuickPick(levels, {
@@ -336,21 +378,38 @@ async function resetSyncOffset(): Promise<void> {
   vscode.window.showInformationMessage('Code Explainer sync offset reset to 0.');
 }
 
-async function promptForApiKey(context: vscode.ExtensionContext): Promise<void> {
+async function ensureOpenAIKey(context: vscode.ExtensionContext): Promise<string | undefined> {
+  const apiKey = await resolveOpenAIKey(context);
+  if (apiKey) {
+    return apiKey;
+  }
+
+  return promptForApiKey(context, {
+    title: 'Code Explainer: OpenAI API Key Required',
+    prompt: 'Enter your OpenAI API key to generate explanations. It will be stored in VS Code SecretStorage.'
+  });
+}
+
+async function promptForApiKey(
+  context: vscode.ExtensionContext,
+  options: { title?: string; prompt?: string } = {}
+): Promise<string | undefined> {
   const value = await vscode.window.showInputBox({
-    title: 'Code Explainer: OpenAI API Key',
-    prompt: 'Stored in VS Code SecretStorage.',
+    title: options.title ?? 'Code Explainer: OpenAI API Key',
+    prompt: options.prompt ?? 'Stored in VS Code SecretStorage.',
     password: true,
     ignoreFocusOut: true,
     validateInput: (input) => (input.trim() ? undefined : 'Enter a non-empty API key.')
   });
 
   if (!value) {
-    return;
+    return undefined;
   }
 
-  await storeOpenAIKey(context, value);
+  const trimmed = value.trim();
+  await storeOpenAIKey(context, trimmed);
   vscode.window.showInformationMessage('OpenAI API key saved for Code Explainer.');
+  return trimmed;
 }
 
 async function clearStoredApiKey(context: vscode.ExtensionContext): Promise<void> {
@@ -559,6 +618,9 @@ async function handleExplanationPanelCommand(message: ExplanationWebviewCommand)
     case 'refresh':
       await vscode.commands.executeCommand('codeExplainer.refreshExplanation');
       break;
+    case 'setModel':
+      await chooseOpenAIModel();
+      break;
     case 'setLevel':
       if (isExplanationLevel(message.level)) {
         await setExplanationLevel(message.level);
@@ -604,6 +666,20 @@ function resolveRightPanelAnchorLine(sourceLine: number | undefined): number | u
   }
 
   return resolveExplanationAnchorLine(stored.rendered.lines, sourceLine);
+}
+
+function uniqueNonEmpty(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
 }
 
 async function findExplainableFiles(folder?: vscode.Uri): Promise<vscode.Uri[]> {

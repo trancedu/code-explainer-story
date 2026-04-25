@@ -13,13 +13,14 @@ export class StatusBarController implements vscode.Disposable {
   update(config: CodeExplainerConfig): void {
     const review = config.reviewEnabled ? 'review on' : 'review off';
     const offset = config.syncLineOffset >= 0 ? `+${config.syncLineOffset}` : String(config.syncLineOffset);
-    this.item.text = `$(book) Explain ${config.explanationLevel} • ${review} • offset ${offset}`;
+    this.item.text = `$(book) Explain ${config.explanationLevel} • ${config.model}`;
     this.item.tooltip = [
       'Code Explainer settings',
+      `Model: ${config.model}`,
       `Level: ${config.explanationLevel}`,
       `Review: ${config.reviewEnabled ? 'on' : 'off'}`,
       `Sync offset: ${offset}`,
-      'Click to change explanation level.'
+      'Click to change explanation level. Use Code Explainer: Set OpenAI Model to change models.'
     ].join('\n');
   }
 
@@ -27,4 +28,3 @@ export class StatusBarController implements vscode.Disposable {
     this.item.dispose();
   }
 }
-

@@ -1,9 +1,14 @@
 .env
 .env.*
+.gitignore
+.vscode/
+docs/
 node_modules/
+release/
 src/
 test/
 tsconfig.json
 *.map
+out/test/
 out/**/*.map
 .vscode-test/

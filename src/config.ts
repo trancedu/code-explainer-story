@@ -3,6 +3,7 @@ import { ExplanationLevel } from './types';
 
 export type CodeExplainerConfig = {
   model: string;
+  modelPresets: string[];
   explanationLevel: ExplanationLevel;
   reviewEnabled: boolean;
   syncLineOffset: number;
@@ -25,6 +26,7 @@ export function getCodeExplainerConfig(): CodeExplainerConfig {
 
   return {
     model: config.get<string>('model', 'gpt-5.4-mini'),
+    modelPresets: config.get<string[]>('modelPresets', ['gpt-5.4-mini', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2']),
     explanationLevel: levels.has(level as ExplanationLevel) ? (level as ExplanationLevel) : 'medium',
     reviewEnabled: config.get<boolean>('reviewEnabled', false),
     syncLineOffset: config.get<number>('syncLineOffset', 0),
@@ -38,6 +40,12 @@ export function getCodeExplainerConfig(): CodeExplainerConfig {
     includeFullPath: config.get<boolean>('privacy.includeFullPath', false),
     excludedGlobs: config.get<string[]>('excludedGlobs', [])
   };
+}
+
+export async function setOpenAIModel(model: string): Promise<void> {
+  await vscode.workspace
+    .getConfiguration('codeExplainer')
+    .update('model', model, vscode.ConfigurationTarget.Global);
 }
 
 export async function setExplanationLevel(level: ExplanationLevel): Promise<void> {

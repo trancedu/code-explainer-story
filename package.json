@@ -14,6 +14,7 @@
   "activationEvents": [
     "onCommand:codeExplainer.explainCurrentFile",
     "onCommand:codeExplainer.refreshExplanation",
+    "onCommand:codeExplainer.setModel",
     "onCommand:codeExplainer.setExplanationLevel",
     "onCommand:codeExplainer.toggleReviewMode",
     "onCommand:codeExplainer.clearCache",
@@ -30,6 +31,7 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
+    "package:vsix": "npm run compile && mkdir -p release && npx @vscode/vsce package --out release/code-explainer-${npm_package_version}.vsix",
     "test": "npm run compile && node --test out/test/*.test.js"
   },
   "devDependencies": {
@@ -48,6 +50,11 @@
         "command": "codeExplainer.refreshExplanation",
         "title": "Code Explainer: Refresh Explanation",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "codeExplainer.setModel",
+        "title": "Code Explainer: Set OpenAI Model",
+        "icon": "$(symbol-variable)"
       },
       {
         "command": "codeExplainer.setExplanationLevel",
@@ -108,6 +115,19 @@
           "type": "string",
           "default": "gpt-5.4-mini",
           "description": "OpenAI model used for code explanations."
+        },
+        "codeExplainer.modelPresets": {
+          "type": "array",
+          "default": [
+            "gpt-5.4-mini",
+            "gpt-5.4",
+            "gpt-5.3-codex",
+            "gpt-5.2"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Model names shown by Code Explainer: Set OpenAI Model. You can still enter a custom model id."
         },
         "codeExplainer.explanationLevel": {
           "type": "string",
@@ -209,24 +229,29 @@
           "group": "navigation@1"
         },
         {
-          "command": "codeExplainer.setExplanationLevel",
+          "command": "codeExplainer.setModel",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@2"
         },
         {
-          "command": "codeExplainer.toggleReviewMode",
+          "command": "codeExplainer.setExplanationLevel",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@3"
         },
         {
-          "command": "codeExplainer.clearCache",
+          "command": "codeExplainer.toggleReviewMode",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@4"
         },
         {
-          "command": "codeExplainer.saveCurrentExplanation",
+          "command": "codeExplainer.clearCache",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@5"
+        },
+        {
+          "command": "codeExplainer.saveCurrentExplanation",
+          "when": "resourceScheme == code-explainer",
+          "group": "navigation@6"
         },
         {
           "command": "codeExplainer.decreaseSyncOffset",
