@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { CodeExplainerConfig } from '../config';
 import { StoredExplanation } from '../state/ExplanationStore';
+import { lineToScrollTop, scrollTopToLine } from '../sync/scrollMath';
 
 export type ExplanationWebviewCommand =
   | { command: 'refresh' }
@@ -102,7 +103,8 @@ export class ExplanationWebviewPanel implements vscode.Disposable {
   revealLine(line: number): void {
     this.panel.webview.postMessage({
       type: 'revealLine',
-      line
+      line,
+      scrollTop: lineToScrollTop(line - 1, getEditorMetrics().lineHeight)
     });
   }
 
@@ -366,7 +368,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       }
 
       scrollTimer = setTimeout(() => {
-        const line = Math.max(1, Math.floor(content.scrollTop / measuredLineHeight) + 1);
+        const line = ${scrollTopToLine.toString()}(content.scrollTop, measuredLineHeight, state.lines.length) + 1;
         vscode.postMessage({ type: 'visibleLineChanged', line });
       }, 50);
     });
@@ -385,7 +387,10 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 
       if (message.type === 'revealLine') {
         suppressScrollUntil = Date.now() + 250;
-        content.scrollTop = Math.max(0, (message.line - 1) * measuredLineHeight);
+        content.scrollTop =
+          typeof message.scrollTop === 'number'
+            ? message.scrollTop
+            : Math.max(0, (message.line - 1) * measuredLineHeight);
         setActiveLine(message.line);
         return;
       }
