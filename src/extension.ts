@@ -149,12 +149,13 @@ async function openExplanation(
 }
 
 async function chooseExplanationLevel(): Promise<void> {
-  const selected = await vscode.window.showQuickPick<ExplanationLevel>(['concise', 'medium', 'detailed'], {
+  const levels: ExplanationLevel[] = ['concise', 'medium', 'detailed'];
+  const selected = await vscode.window.showQuickPick(levels, {
     title: 'Code Explainer: Explanation Level',
     placeHolder: 'Choose how much detail to generate'
   });
 
-  if (selected) {
+  if (selected && isExplanationLevel(selected)) {
     await setExplanationLevel(selected);
     vscode.window.showInformationMessage(`Code Explainer level set to ${selected}.`);
   }
@@ -210,3 +211,6 @@ function globMatches(filePath: string, glob: string): boolean {
   return new RegExp(`^${escaped}$`).test(filePath) || new RegExp(`${escaped}$`).test(filePath);
 }
 
+function isExplanationLevel(value: string): value is ExplanationLevel {
+  return value === 'concise' || value === 'medium' || value === 'detailed';
+}
