@@ -27,6 +27,7 @@ let activeSourceEditor: vscode.TextEditor | undefined;
 let sourceScrollDebounce: NodeJS.Timeout | undefined;
 let ignoreSourceScrollUntil = 0;
 let ignoreWebviewScrollUntil = 0;
+let activeSourceLine: number | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   extensionUri = context.extensionUri;
@@ -51,6 +52,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('codeExplainer.clearOpenAIKey', () => clearStoredApiKey(context)),
     vscode.workspace.onDidChangeTextDocument((event) => markStaleIfExplained(event.document)),
     vscode.window.onDidChangeTextEditorVisibleRanges((event) => handleSourceVisibleRangesChanged(event)),
+    vscode.window.onDidChangeTextEditorSelection((event) => handleSourceSelectionChanged(event)),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('codeExplainer')) {
         refreshSettingsDisplay();
@@ -209,6 +211,7 @@ async function openExplanation(
     activeExplanationPanel?.dispose();
     activeExplanationPanel = ExplanationWebviewPanel.create(contextExtensionUri(), sourceEditor.document.uri, {
       onVisibleLineChanged: (line) => handleWebviewVisibleLineChanged(line),
+      onActiveLineChanged: (line) => handleWebviewActiveLineChanged(line),
       onCommand: (message) => handleExplanationPanelCommand(message),
       onDispose: () => {
         activeExplanationPanel = undefined;
@@ -219,6 +222,7 @@ async function openExplanation(
   }
 
   activeExplanationPanel.update(stored, getCodeExplainerConfig(), getEditorMetrics());
+  updateActiveLineFromEditor(sourceEditor);
 }
 
 async function chooseExplanationLevel(): Promise<void> {
@@ -365,6 +369,20 @@ function handleSourceVisibleRangesChanged(event: vscode.TextEditorVisibleRangesC
   }, 50);
 }
 
+function handleSourceSelectionChanged(event: vscode.TextEditorSelectionChangeEvent): void {
+  if (!activeExplanationPanel || !activeExplanationPanel.matchesSource(event.textEditor.document.uri)) {
+    return;
+  }
+
+  updateActiveLineFromEditor(event.textEditor);
+}
+
+function updateActiveLineFromEditor(editor: vscode.TextEditor): void {
+  activeSourceEditor = editor;
+  activeSourceLine = editor.selection.active.line + 1;
+  activeExplanationPanel?.setActiveLine(activeSourceLine);
+}
+
 function handleWebviewVisibleLineChanged(line: number): void {
   if (Date.now() < ignoreWebviewScrollUntil) {
     return;
@@ -384,6 +402,19 @@ function handleWebviewVisibleLineChanged(line: number): void {
 
   ignoreSourceScrollUntil = Date.now() + 250;
   sourceEditor.revealRange(new vscode.Range(targetLine, 0, targetLine, 0), vscode.TextEditorRevealType.AtTop);
+}
+
+function handleWebviewActiveLineChanged(line: number): void {
+  const sourceEditor = findVisibleSourceEditor();
+  if (!sourceEditor) {
+    return;
+  }
+
+  activeSourceLine = line;
+  activeSourceEditor = sourceEditor;
+  const targetLine = Math.max(0, Math.min(sourceEditor.document.lineCount - 1, line - 1));
+  ignoreSourceScrollUntil = Date.now() + 250;
+  sourceEditor.revealRange(new vscode.Range(targetLine, 0, targetLine, 0), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 }
 
 async function handleExplanationPanelCommand(message: ExplanationWebviewCommand): Promise<void> {
@@ -421,5 +452,6 @@ function refreshSettingsDisplay(): void {
   const stored = activeSourceEditor ? store.getBySource(activeSourceEditor.document.uri) : undefined;
   if (stored) {
     activeExplanationPanel?.update(stored, config, getEditorMetrics());
+    activeExplanationPanel?.setActiveLine(activeSourceLine);
   }
 }

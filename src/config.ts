@@ -25,7 +25,7 @@ export function getCodeExplainerConfig(): CodeExplainerConfig {
     explanationLevel: levels.has(level as ExplanationLevel) ? (level as ExplanationLevel) : 'medium',
     reviewEnabled: config.get<boolean>('reviewEnabled', false),
     syncLineOffset: config.get<number>('syncLineOffset', 0),
-    webviewHeaderHeight: config.get<number>('webviewHeaderHeight', 72),
+    webviewHeaderHeight: config.get<number>('webviewHeaderHeight', 42),
     maxFileLines: config.get<number>('maxFileLines', 3000),
     maxChunkLines: config.get<number>('maxChunkLines', 20),
     cacheExplanations: config.get<boolean>('cacheExplanations', true),

@@ -14,6 +14,7 @@ export type ExplanationWebviewCommand =
 
 export type ExplanationWebviewCallbacks = {
   onVisibleLineChanged(line: number): void;
+  onActiveLineChanged(line: number): void;
   onCommand(message: ExplanationWebviewCommand): void;
   onDispose(): void;
 };
@@ -36,6 +37,7 @@ type WebviewState = {
   lines: string[];
   fileSummary: string;
   reviewCount: number;
+  activeLine: number | undefined;
 };
 
 export class ExplanationWebviewPanel implements vscode.Disposable {
@@ -104,6 +106,13 @@ export class ExplanationWebviewPanel implements vscode.Disposable {
     });
   }
 
+  setActiveLine(line: number | undefined): void {
+    this.panel.webview.postMessage({
+      type: 'setActiveLine',
+      line
+    });
+  }
+
   matchesSource(uri: vscode.Uri): boolean {
     return this.sourceUri.toString() === uri.toString();
   }
@@ -128,6 +137,11 @@ export class ExplanationWebviewPanel implements vscode.Disposable {
 
     if (message.type === 'visibleLineChanged' && typeof message.line === 'number') {
       this.callbacks.onVisibleLineChanged(message.line);
+      return;
+    }
+
+    if (message.type === 'activeLineChanged' && typeof message.line === 'number') {
+      this.callbacks.onActiveLineChanged(message.line);
       return;
     }
 
@@ -165,7 +179,8 @@ function toWebviewState(
     fontFamily: metrics.fontFamily,
     lines: stored.rendered.lines,
     fileSummary: stored.rendered.fileSummary,
-    reviewCount: stored.rendered.reviewItems.length
+    reviewCount: stored.rendered.reviewItems.length,
+    activeLine: undefined
   };
 }
 
@@ -207,32 +222,18 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       height: var(--header-height);
       border-bottom: 1px solid var(--vscode-editorWidget-border);
       background: var(--vscode-editor-background);
-      display: grid;
-      grid-template-rows: 1fr 1fr;
-      gap: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       padding: 6px 10px;
       overflow: hidden;
     }
 
-    .row {
-      min-width: 0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      white-space: nowrap;
-    }
-
-    .file {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      font-weight: 600;
-    }
-
-    .status {
-      color: var(--vscode-descriptionForeground);
-      overflow: hidden;
-      text-overflow: ellipsis;
+    .toolbar label,
+    .toolbar button,
+    .toolbar select,
+    .toolbar span {
+      flex: 0 0 auto;
     }
 
     button,
@@ -287,6 +288,12 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       display: flex;
       min-height: var(--line-height);
       white-space: pre;
+      cursor: default;
+    }
+
+    .line.active {
+      background: var(--vscode-editor-lineHighlightBackground);
+      outline: 1px solid var(--vscode-editor-lineHighlightBorder, transparent);
     }
 
     .gutter {
@@ -307,24 +314,18 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 </head>
 <body>
   <div class="toolbar">
-    <div class="row">
-      <span class="file" id="fileName"></span>
-      <span class="status" id="summary"></span>
-    </div>
-    <div class="row">
-      <label>Level <select id="level">
-        <option value="concise">concise</option>
-        <option value="medium">medium</option>
-        <option value="detailed">detailed</option>
-      </select></label>
-      <button id="review" class="secondary"></button>
-      <button id="refresh">Refresh</button>
-      <button id="clear" class="secondary">Clear cache</button>
-      <button id="minus" class="secondary">Offset -</button>
-      <span class="offset" id="offset"></span>
-      <button id="plus" class="secondary">Offset +</button>
-      <button id="reset" class="secondary">Reset</button>
-    </div>
+    <label>Level <select id="level">
+      <option value="concise">concise</option>
+      <option value="medium">medium</option>
+      <option value="detailed">detailed</option>
+    </select></label>
+    <button id="review" class="secondary"></button>
+    <button id="refresh">Refresh</button>
+    <button id="clear" class="secondary">Clear cache</button>
+    <button id="minus" class="secondary">Offset -</button>
+    <span class="offset" id="offset"></span>
+    <button id="plus" class="secondary">Offset +</button>
+    <button id="reset" class="secondary">Reset</button>
   </div>
   <div class="content" id="content">
     <div class="lines" id="lines"></div>
@@ -336,8 +337,6 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
     let scrollTimer = undefined;
     let suppressScrollUntil = 0;
 
-    const fileName = document.getElementById('fileName');
-    const summary = document.getElementById('summary');
     const level = document.getElementById('level');
     const review = document.getElementById('review');
     const refresh = document.getElementById('refresh');
@@ -387,6 +386,12 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       if (message.type === 'revealLine') {
         suppressScrollUntil = Date.now() + 250;
         content.scrollTop = Math.max(0, (message.line - 1) * measuredLineHeight);
+        setActiveLine(message.line);
+        return;
+      }
+
+      if (message.type === 'setActiveLine') {
+        setActiveLine(message.line);
       }
     });
 
@@ -400,8 +405,6 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       document.documentElement.style.setProperty('--font-size', state.fontSize + 'px');
       document.documentElement.style.setProperty('--font-family', state.fontFamily);
 
-      fileName.textContent = state.fileName;
-      summary.textContent = state.fileSummary || 'Waiting for explanation...';
       level.value = state.level;
       review.textContent = state.reviewEnabled ? 'Review on' : 'Review off';
       offset.textContent = formatOffset(state.syncOffset);
@@ -411,6 +414,9 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
         const row = document.createElement('div');
         row.className = 'line';
         row.dataset.line = String(index + 1);
+        if (state.activeLine === index + 1) {
+          row.classList.add('active');
+        }
 
         const gutter = document.createElement('span');
         gutter.className = 'gutter';
@@ -421,6 +427,10 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
         text.textContent = lineText || '';
 
         row.append(gutter, text);
+        row.addEventListener('click', () => {
+          setActiveLine(index + 1);
+          vscode.postMessage({ type: 'activeLineChanged', line: index + 1 });
+        });
         fragment.append(row);
       });
 
@@ -430,6 +440,17 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 
     function formatOffset(value) {
       return value >= 0 ? '+' + value : String(value);
+    }
+
+    function setActiveLine(line) {
+      state.activeLine = typeof line === 'number' ? line : undefined;
+      document.querySelectorAll('.line.active').forEach((node) => node.classList.remove('active'));
+      if (state.activeLine === undefined) {
+        return;
+      }
+
+      const row = document.querySelector('.line[data-line="' + state.activeLine + '"]');
+      row?.classList.add('active');
     }
 
     render();

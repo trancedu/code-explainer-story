@@ -117,7 +117,7 @@
         },
         "codeExplainer.webviewHeaderHeight": {
           "type": "number",
-          "default": 72,
+          "default": 42,
           "minimum": 32,
           "maximum": 160,
           "description": "Height in pixels for the fixed top panel above the explanation content."
