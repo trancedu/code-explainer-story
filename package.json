@@ -130,9 +130,9 @@
         },
         "codeExplainer.maxChunkLines": {
           "type": "number",
-          "default": 120,
-          "minimum": 20,
-          "description": "Maximum source lines per chunk sent inside the one-file request."
+          "default": 20,
+          "minimum": 5,
+          "description": "Maximum source lines per chunk sent inside the one-file request. Smaller chunks produce more frequent flow explanations."
         },
         "codeExplainer.cacheExplanations": {
           "type": "boolean",

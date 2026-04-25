@@ -1,4 +1,5 @@
 import { CodeChunk } from '../types';
+import { splitSourceLines } from './sourceLines';
 
 export function fallbackChunkText(text: string, languageId: string, maxChunkLines: number): CodeChunk[] {
   const lines = splitLines(text);
@@ -30,10 +31,7 @@ export function fallbackChunkText(text: string, languageId: string, maxChunkLine
 }
 
 export function splitLines(text: string): string[] {
-  if (text.length === 0) {
-    return [''];
-  }
-  return text.split(/\r?\n/);
+  return splitSourceLines(text);
 }
 
 function collectBoundaries(lines: string[], languageId: string): Set<number> {
@@ -156,4 +154,3 @@ export function lineNumberedCode(lines: string[], startLine: number, endLine: nu
     .map((line, index) => `${String(startLine + index).padStart(width, ' ')} | ${line}`)
     .join('\n');
 }
-

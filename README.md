@@ -23,6 +23,8 @@ The fixed header helps compensate for source-editor top content such as breadcru
 
 Explanations are streamed into the right pane as chunk objects complete. Tests mock this behavior and never call the OpenAI API.
 
+`codeExplainer.maxChunkLines` defaults to `20`, so even a long function receives periodic flow explanations instead of one giant summary. Concise and medium modes render these chunk summaries as flow notes; detailed mode can show line-level explanations, but blank and comment-only source lines are always kept empty.
+
 ## API Key
 
 Use `Code Explainer: Set OpenAI API Key` to store your key in VS Code SecretStorage. For local extension development only, the extension also reads `OPENAI_API_KEY` from `.env` in the extension folder.

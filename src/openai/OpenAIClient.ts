@@ -22,10 +22,13 @@ const systemPrompt = [
   'Return JSON only, matching the supplied schema.',
   'Each explanation line maps to a physical source line.',
   'Never include newline characters inside explanation strings.',
+  'Never explain blank lines or comment-only lines. Leave those lines without explanation.',
+  'Never write text such as "blank line", "empty line", "comment marking", or "comment continuing".',
   'Do not invent code behavior. State uncertainty briefly when needed.',
-  'For concise level, explain only meaningful blocks.',
-  'For medium level, explain important lines and branches.',
-  'For detailed level, explain nearly every meaningful line.',
+  'For concise level, write a compact flow summary in each chunk summary and keep lines sparse or empty.',
+  'For medium level, explain the chunk flow and important decisions; do not narrate every field, import, or simple assignment line.',
+  'For detailed level, explain meaningful executable or declarative code lines, but still skip blank and comment-only lines.',
+  'Treat adjacent class fields, schema fields, object properties, imports, and constant declarations as a group when possible.',
   'If reviewEnabled is false, return empty review arrays.',
   'If reviewEnabled is true, focus review findings on correctness, security, performance, typing, and maintainability.'
 ].join(' ');

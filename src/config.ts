@@ -27,7 +27,7 @@ export function getCodeExplainerConfig(): CodeExplainerConfig {
     syncLineOffset: config.get<number>('syncLineOffset', 0),
     webviewHeaderHeight: config.get<number>('webviewHeaderHeight', 72),
     maxFileLines: config.get<number>('maxFileLines', 3000),
-    maxChunkLines: config.get<number>('maxChunkLines', 120),
+    maxChunkLines: config.get<number>('maxChunkLines', 20),
     cacheExplanations: config.get<boolean>('cacheExplanations', true),
     includeFullPath: config.get<boolean>('privacy.includeFullPath', false),
     excludedGlobs: config.get<string[]>('excludedGlobs', [])

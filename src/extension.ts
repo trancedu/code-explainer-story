@@ -153,6 +153,10 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
         const partial = renderExplanation(document.lineCount, {
           fileSummary: `Generated ${streamedChunks.size} of ${chunks.length} chunks...`,
           chunks: [...streamedChunks.values()]
+        }, {
+          sourceText: content,
+          languageId: document.languageId,
+          level: config.explanationLevel
         });
         store.update(stored.id, partial, false);
         provider.refresh(stored.explanationUri);
@@ -174,7 +178,11 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
         );
 
         progress.report({ message: 'Finalizing aligned explanation lines...' });
-        const rendered = renderExplanation(document.lineCount, response);
+        const rendered = renderExplanation(document.lineCount, response, {
+          sourceText: content,
+          languageId: document.languageId,
+          level: config.explanationLevel
+        });
         store.update(stored.id, rendered, config.cacheExplanations);
         provider.refresh(stored.explanationUri);
         activeExplanationPanel?.update(stored, getCodeExplainerConfig(), getEditorMetrics());
