@@ -5,7 +5,10 @@ export type RenderExplanationOptions = {
   sourceText?: string;
   languageId?: string;
   level?: ExplanationLevel;
+  wrapColumn?: number;
 };
+
+const defaultWrapColumn = 80;
 
 export function renderExplanation(
   lineCount: number,
@@ -70,10 +73,16 @@ export function renderExplanation(
   }
 
   const cleanedLines = sourceLines ? clearIgnorableRows(lines, sourceLines, languageId) : lines;
+  const wrappedLines = wrapChunkedExplanations(
+    cleanedLines,
+    response,
+    lineCount,
+    options.wrapColumn ?? defaultWrapColumn
+  );
 
   return {
-    text: cleanedLines.join('\n'),
-    lines: cleanedLines,
+    text: wrappedLines.join('\n'),
+    lines: wrappedLines,
     reviewItems,
     fileSummary: sanitizeLine(response.fileSummary)
   };
@@ -176,4 +185,99 @@ function isSimpleGroupedLine(line: string, languageId: string): boolean {
   }
 
   return false;
+}
+
+function wrapChunkedExplanations(
+  lines: string[],
+  response: ExplanationResponse,
+  lineCount: number,
+  wrapColumn: number
+): string[] {
+  const wrapped = [...lines];
+  const column = Math.max(20, Math.floor(wrapColumn));
+
+  for (const chunk of response.chunks) {
+    const startIndex = clamp(chunk.startLine, 1, lineCount) - 1;
+    const endIndex = clamp(chunk.endLine, 1, lineCount) - 1;
+    const initialNonEmptyRows: number[] = [];
+
+    for (let index = startIndex; index <= endIndex; index += 1) {
+      if (wrapped[index]?.trim()) {
+        initialNonEmptyRows.push(index);
+      }
+    }
+
+    for (const rowIndex of initialNonEmptyRows) {
+      const text = wrapped[rowIndex];
+      if (!text || text.length <= column) {
+        continue;
+      }
+
+      const segments = wrapText(text, column);
+      if (segments.length <= 1) {
+        continue;
+      }
+
+      wrapped[rowIndex] = segments.shift() ?? '';
+
+      while (segments.length > 0) {
+        const emptyRow = findNextEmptyRow(wrapped, rowIndex + 1, endIndex);
+        if (emptyRow === undefined) {
+          const fallbackIndex = endIndex;
+          wrapped[fallbackIndex] = appendText(wrapped[fallbackIndex], segments.join(' '));
+          break;
+        }
+
+        wrapped[emptyRow] = segments.shift() ?? '';
+      }
+    }
+  }
+
+  return wrapped;
+}
+
+function findNextEmptyRow(lines: string[], startIndex: number, endIndex: number): number | undefined {
+  for (let index = startIndex; index <= endIndex; index += 1) {
+    if (!lines[index]?.trim()) {
+      return index;
+    }
+  }
+
+  return undefined;
+}
+
+function appendText(existing: string, next: string): string {
+  const sanitizedNext = sanitizeLine(next);
+  if (!sanitizedNext) {
+    return existing;
+  }
+
+  return existing ? `${existing} ${sanitizedNext}` : sanitizedNext;
+}
+
+function wrapText(text: string, column: number): string[] {
+  const words = sanitizeLine(text).split(/\s+/).filter(Boolean);
+  const segments: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    if (!current) {
+      current = word;
+      continue;
+    }
+
+    if (current.length + 1 + word.length <= column) {
+      current = `${current} ${word}`;
+      continue;
+    }
+
+    segments.push(current);
+    current = word;
+  }
+
+  if (current) {
+    segments.push(current);
+  }
+
+  return segments;
 }

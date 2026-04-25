@@ -207,6 +207,112 @@ test('renderExplanation anchors chunk summaries to the first meaningful line', (
   assert.deepEqual(rendered.lines, ['', '', 'Runs the helper flow.', '']);
 });
 
+test('renderExplanation wraps long explanations into empty rows below within the chunk', () => {
+  const source = [
+    'def run():',
+    '    call_one()',
+    '    call_two()',
+    '    call_three()'
+  ].join('\n');
+  const response: ExplanationResponse = {
+    fileSummary: 'Example',
+    chunks: [
+      {
+        id: 'chunk-1-1',
+        startLine: 1,
+        endLine: 4,
+        summary: 'Coordinates database validation query execution and response shaping for the endpoint.',
+        lines: [],
+        review: []
+      }
+    ]
+  };
+
+  const rendered = renderExplanation(4, response, {
+    sourceText: source,
+    languageId: 'python',
+    level: 'concise',
+    wrapColumn: 34
+  });
+
+  assert.equal(rendered.lines.length, 4);
+  assert.ok(rendered.lines[0].length <= 34);
+  assert.ok(rendered.lines[1].length > 0);
+  assert.match(`${rendered.lines[0]} ${rendered.lines[1]}`, /Coordinates database validation query execution/);
+});
+
+test('renderExplanation does not wrap text into the next chunk', () => {
+  const source = [
+    'def first():',
+    '    return 1',
+    'def second():',
+    '    return 2'
+  ].join('\n');
+  const response: ExplanationResponse = {
+    fileSummary: 'Example',
+    chunks: [
+      {
+        id: 'chunk-1-1',
+        startLine: 1,
+        endLine: 2,
+        summary: 'Explains the first helper with enough detail to require wrapping.',
+        lines: [],
+        review: []
+      },
+      {
+        id: 'chunk-2-1',
+        startLine: 3,
+        endLine: 4,
+        summary: 'Explains the second helper.',
+        lines: [],
+        review: []
+      }
+    ]
+  };
+
+  const rendered = renderExplanation(4, response, {
+    sourceText: source,
+    languageId: 'python',
+    level: 'concise',
+    wrapColumn: 28
+  });
+
+  assert.match(rendered.lines[1], /detail/);
+  assert.equal(rendered.lines[2], 'Explains the second helper.');
+});
+
+test('renderExplanation appends overflow to the chunk tail when no empty rows remain', () => {
+  const source = [
+    'def choose(value):',
+    '    return value'
+  ].join('\n');
+  const response: ExplanationResponse = {
+    fileSummary: 'Example',
+    chunks: [
+      {
+        id: 'chunk-1-1',
+        startLine: 1,
+        endLine: 2,
+        summary: 'Explains the helper behavior with a long enough summary to wrap.',
+        lines: [
+          { line: 2, text: 'Existing line note.' }
+        ],
+        review: []
+      }
+    ]
+  };
+
+  const rendered = renderExplanation(2, response, {
+    sourceText: source,
+    languageId: 'python',
+    level: 'detailed',
+    wrapColumn: 25
+  });
+
+  assert.match(rendered.lines[1], /Existing line note/);
+  assert.match(rendered.lines[1], /summary to wrap/);
+});
+
 test('sanitizeLine collapses all whitespace to one physical line', () => {
   assert.equal(sanitizeLine(' one\n two\t three  '), 'one two three');
 });
