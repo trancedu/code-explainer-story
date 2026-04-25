@@ -6,6 +6,7 @@ export type CodeExplainerConfig = {
   explanationLevel: ExplanationLevel;
   reviewEnabled: boolean;
   syncLineOffset: number;
+  webviewHeaderHeight: number;
   maxFileLines: number;
   maxChunkLines: number;
   cacheExplanations: boolean;
@@ -23,7 +24,8 @@ export function getCodeExplainerConfig(): CodeExplainerConfig {
     model: config.get<string>('model', 'gpt-5.4-mini'),
     explanationLevel: levels.has(level as ExplanationLevel) ? (level as ExplanationLevel) : 'medium',
     reviewEnabled: config.get<boolean>('reviewEnabled', false),
-    syncLineOffset: config.get<number>('syncLineOffset', 2),
+    syncLineOffset: config.get<number>('syncLineOffset', 0),
+    webviewHeaderHeight: config.get<number>('webviewHeaderHeight', 72),
     maxFileLines: config.get<number>('maxFileLines', 3000),
     maxChunkLines: config.get<number>('maxChunkLines', 120),
     cacheExplanations: config.get<boolean>('cacheExplanations', true),

@@ -110,10 +110,17 @@
         },
         "codeExplainer.syncLineOffset": {
           "type": "number",
-          "default": 2,
+          "default": 0,
           "minimum": -20,
           "maximum": 20,
           "description": "Line calibration applied while syncing source and explanation panes. Positive values scroll the explanation farther down from source events."
+        },
+        "codeExplainer.webviewHeaderHeight": {
+          "type": "number",
+          "default": 72,
+          "minimum": 32,
+          "maximum": 160,
+          "description": "Height in pixels for the fixed top panel above the explanation content."
         },
         "codeExplainer.maxFileLines": {
           "type": "number",

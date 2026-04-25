@@ -1,6 +1,6 @@
 # Code Explainer
 
-Code Explainer opens a source file beside a generated English explanation. The source stays in the normal VS Code editor, while the explanation is a read-only virtual document with the same number of physical lines as the source. Line 100 on the left maps to line 100 on the right, and vertical scrolling is synchronized both ways.
+Code Explainer opens a source file beside a generated English explanation. The source stays in the normal VS Code editor, while the explanation appears in a right-side panel with a fixed settings header and a scrollable line-by-line explanation. Line 100 on the left maps to line 100 on the right, and vertical scrolling is synchronized both ways.
 
 ## Commands
 
@@ -15,9 +15,11 @@ Code Explainer opens a source file beside a generated English explanation. The s
 - `Code Explainer: Set OpenAI API Key`
 - `Code Explainer: Clear OpenAI API Key`
 
-When an explanation document is open, the editor title bar also shows quick actions for refresh, level, review, cache, and sync offset. The status bar shows the current level, review mode, and offset.
+When an explanation panel is open, its top header always shows the current file, explanation level, review mode, sync offset, refresh action, and cache action. The status bar also shows the current level, review mode, and offset.
 
-`codeExplainer.syncLineOffset` calibrates visual scroll alignment when the source editor has extra top content such as breadcrumbs, CodeLens, or blame annotations. The default is `+2`; use the offset commands if your right pane is still a line or two high/low.
+The fixed header helps compensate for source-editor top content such as breadcrumbs, CodeLens, or blame annotations. Because of that, `codeExplainer.syncLineOffset` now defaults to `0`; use the offset commands only if your right pane is still a line or two high/low.
+
+`codeExplainer.webviewHeaderHeight` controls the fixed header height in pixels. Raise or lower it if your source editor has unusually tall or short top annotations.
 
 Explanations are streamed into the right pane as chunk objects complete. Tests mock this behavior and never call the OpenAI API.
 
