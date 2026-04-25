@@ -17,6 +17,9 @@
     "onCommand:codeExplainer.setExplanationLevel",
     "onCommand:codeExplainer.toggleReviewMode",
     "onCommand:codeExplainer.clearCache",
+    "onCommand:codeExplainer.saveCurrentExplanation",
+    "onCommand:codeExplainer.explainFolder",
+    "onCommand:codeExplainer.explainWorkspace",
     "onCommand:codeExplainer.increaseSyncOffset",
     "onCommand:codeExplainer.decreaseSyncOffset",
     "onCommand:codeExplainer.resetSyncOffset",
@@ -60,6 +63,19 @@
         "command": "codeExplainer.clearCache",
         "title": "Code Explainer: Clear Cache",
         "icon": "$(trash)"
+      },
+      {
+        "command": "codeExplainer.saveCurrentExplanation",
+        "title": "Code Explainer: Save Current Explanation Snapshot",
+        "icon": "$(save)"
+      },
+      {
+        "command": "codeExplainer.explainFolder",
+        "title": "Code Explainer: Explain Folder"
+      },
+      {
+        "command": "codeExplainer.explainWorkspace",
+        "title": "Code Explainer: Explain Workspace"
       },
       {
         "command": "codeExplainer.increaseSyncOffset",
@@ -139,6 +155,30 @@
           "default": true,
           "description": "Reuse in-memory explanations for unchanged files and settings."
         },
+        "codeExplainer.persistExplanations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Save successful explanations under .code-explainer/explanations so they can be committed and reused."
+        },
+        "codeExplainer.autoRegenerateOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically regenerate an existing explanation snapshot after its source file is saved. Disabled by default to avoid unexpected API usage."
+        },
+        "codeExplainer.includeGlobs": {
+          "type": "array",
+          "default": [
+            "**/*.py",
+            "**/*.R",
+            "**/*.r",
+            "**/*.ts",
+            "**/*.tsx"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "File globs used by Explain Folder and Explain Workspace commands."
+        },
         "codeExplainer.privacy.includeFullPath": {
           "type": "boolean",
           "default": false,
@@ -148,6 +188,7 @@
           "type": "array",
           "default": [
             "**/.env",
+            "**/.code-explainer/**",
             "**/node_modules/**",
             "**/.git/**",
             "**/dist/**",
@@ -181,6 +222,11 @@
           "command": "codeExplainer.clearCache",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@4"
+        },
+        {
+          "command": "codeExplainer.saveCurrentExplanation",
+          "when": "resourceScheme == code-explainer",
+          "group": "navigation@5"
         },
         {
           "command": "codeExplainer.decreaseSyncOffset",

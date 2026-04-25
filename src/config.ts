@@ -10,6 +10,9 @@ export type CodeExplainerConfig = {
   maxFileLines: number;
   maxChunkLines: number;
   cacheExplanations: boolean;
+  persistExplanations: boolean;
+  autoRegenerateOnSave: boolean;
+  includeGlobs: string[];
   includeFullPath: boolean;
   excludedGlobs: string[];
 };
@@ -29,6 +32,9 @@ export function getCodeExplainerConfig(): CodeExplainerConfig {
     maxFileLines: config.get<number>('maxFileLines', 3000),
     maxChunkLines: config.get<number>('maxChunkLines', 10),
     cacheExplanations: config.get<boolean>('cacheExplanations', true),
+    persistExplanations: config.get<boolean>('persistExplanations', true),
+    autoRegenerateOnSave: config.get<boolean>('autoRegenerateOnSave', false),
+    includeGlobs: config.get<string[]>('includeGlobs', ['**/*.py', '**/*.R', '**/*.r', '**/*.ts', '**/*.tsx']),
     includeFullPath: config.get<boolean>('privacy.includeFullPath', false),
     excludedGlobs: config.get<string[]>('excludedGlobs', [])
   };

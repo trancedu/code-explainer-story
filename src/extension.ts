@@ -7,6 +7,12 @@ import { renderExplanation, renderPendingExplanation } from './analysis/postProc
 import { getCodeExplainerConfig, setExplanationLevel, setReviewEnabled, setSyncLineOffset } from './config';
 import { clearOpenAIKey, resolveOpenAIKey, storeOpenAIKey } from './devEnv';
 import { OpenAIClient } from './openai/OpenAIClient';
+import {
+  readSnapshot,
+  renderedFromSnapshot,
+  snapshotMatches,
+  writeSnapshot
+} from './persistence/snapshots';
 import { ExplanationDocumentProvider } from './providers/ExplanationDocumentProvider';
 import { DiagnosticsController } from './review/DiagnosticsController';
 import { ExplanationStore, StoredExplanation, hashText } from './state/ExplanationStore';
@@ -30,6 +36,7 @@ let sourceScrollDebounce: NodeJS.Timeout | undefined;
 let ignoreSourceScrollUntil = 0;
 let ignoreWebviewScrollUntil = 0;
 let activeSourceLine: number | undefined;
+const staleSavePromptInFlight = new Set<string>();
 
 export function activate(context: vscode.ExtensionContext): void {
   extensionUri = context.extensionUri;
@@ -47,12 +54,16 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('codeExplainer.setExplanationLevel', chooseExplanationLevel),
     vscode.commands.registerCommand('codeExplainer.toggleReviewMode', toggleReviewMode),
     vscode.commands.registerCommand('codeExplainer.clearCache', clearCache),
+    vscode.commands.registerCommand('codeExplainer.saveCurrentExplanation', saveCurrentExplanation),
+    vscode.commands.registerCommand('codeExplainer.explainFolder', () => explainFolder(context)),
+    vscode.commands.registerCommand('codeExplainer.explainWorkspace', () => explainWorkspace(context)),
     vscode.commands.registerCommand('codeExplainer.increaseSyncOffset', () => adjustSyncOffset(1)),
     vscode.commands.registerCommand('codeExplainer.decreaseSyncOffset', () => adjustSyncOffset(-1)),
     vscode.commands.registerCommand('codeExplainer.resetSyncOffset', () => resetSyncOffset()),
     vscode.commands.registerCommand('codeExplainer.setOpenAIKey', () => promptForApiKey(context)),
     vscode.commands.registerCommand('codeExplainer.clearOpenAIKey', () => clearStoredApiKey(context)),
     vscode.workspace.onDidChangeTextDocument((event) => markStaleIfExplained(event.document)),
+    vscode.workspace.onDidSaveTextDocument((document) => void handleSavedDocument(context, document)),
     vscode.window.onDidChangeTextEditorVisibleRanges((event) => handleSourceVisibleRangesChanged(event)),
     vscode.window.onDidChangeTextEditorSelection((event) => handleSourceSelectionChanged(event)),
     vscode.workspace.onDidChangeConfiguration((event) => {
@@ -91,13 +102,39 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
     return;
   }
 
-  const apiKey = await resolveOpenAIKey(context);
-  if (!apiKey) {
-    const action = await vscode.window.showWarningMessage('Set an OpenAI API key before generating explanations.', 'Set Key');
-    if (action === 'Set Key') {
-      await promptForApiKey(context);
+  const content = document.getText();
+  const contentHash = hashText(content);
+  const requestKey = {
+    sourceUri: document.uri.toString(),
+    documentVersion: document.version,
+    contentHash,
+    level: config.explanationLevel,
+    reviewEnabled: config.reviewEnabled,
+    model: config.model
+  };
+
+  if (!forceRefresh && config.cacheExplanations) {
+    const cached = store.getBySource(document.uri);
+    if (
+      cached &&
+      cached.key.contentHash === contentHash &&
+      cached.key.level === config.explanationLevel &&
+      cached.key.reviewEnabled === config.reviewEnabled &&
+      cached.key.model === config.model
+    ) {
+      await openExplanation(editor, cached);
+      return;
     }
-    return;
+  }
+
+  if (!forceRefresh && config.persistExplanations) {
+    const snapshot = await readSnapshot(document.uri, config);
+    if (snapshot && snapshotMatches(snapshot, contentHash, config, document.lineCount)) {
+      const stored = store.put(requestKey, document.uri, renderedFromSnapshot(snapshot), config.cacheExplanations);
+      diagnosticsController.update(document.uri, stored.rendered.reviewItems);
+      await openExplanation(editor, stored);
+      return;
+    }
   }
 
   await vscode.window.withProgress(
@@ -108,29 +145,13 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
     },
     async (progress, token) => {
       progress.report({ message: 'Chunking file...' });
-      const content = document.getText();
-      const contentHash = hashText(content);
-      const requestKey = {
-        sourceUri: document.uri.toString(),
-        documentVersion: document.version,
-        contentHash,
-        level: config.explanationLevel,
-        reviewEnabled: config.reviewEnabled,
-        model: config.model
-      };
-
-      if (!forceRefresh && config.cacheExplanations) {
-        const cached = store.getBySource(document.uri);
-        if (
-          cached &&
-          cached.key.contentHash === contentHash &&
-          cached.key.level === config.explanationLevel &&
-          cached.key.reviewEnabled === config.reviewEnabled &&
-          cached.key.model === config.model
-        ) {
-          await openExplanation(editor, cached);
-          return;
+      const apiKey = await resolveOpenAIKey(context);
+      if (!apiKey) {
+        const action = await vscode.window.showWarningMessage('Set an OpenAI API key before generating explanations.', 'Set Key');
+        if (action === 'Set Key') {
+          await promptForApiKey(context);
         }
+        return;
       }
 
       const chunkLineLimit = effectiveMaxChunkLines(config.explanationLevel, config.maxChunkLines);
@@ -188,10 +209,13 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
           languageId: document.languageId,
           level: config.explanationLevel
         });
-        store.update(stored.id, rendered, config.cacheExplanations);
+        const finalStored = store.update(stored.id, rendered, config.cacheExplanations);
         provider.refresh(stored.explanationUri);
         activeExplanationPanel?.update(stored, getCodeExplainerConfig(), getEditorMetrics());
         diagnosticsController.update(document.uri, rendered.reviewItems);
+        if (finalStored && config.persistExplanations) {
+          await writeSnapshot(finalStored, config, document.languageId, document.lineCount);
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const failed = renderPendingExplanation(document.lineCount, `Code Explainer failed: ${message}`);
@@ -255,6 +279,48 @@ function clearCache(): void {
   vscode.window.showInformationMessage('Code Explainer cache cleared.');
 }
 
+async function saveCurrentExplanation(): Promise<void> {
+  const sourceEditor = activeSourceEditor ?? getTargetSourceEditor();
+  if (!sourceEditor) {
+    vscode.window.showWarningMessage('No explained source file is active.');
+    return;
+  }
+
+  const stored = store.getBySource(sourceEditor.document.uri);
+  if (!stored) {
+    vscode.window.showWarningMessage('No generated explanation is available to save for this file.');
+    return;
+  }
+
+  const snapshotUri = await writeSnapshot(stored, getCodeExplainerConfig(), sourceEditor.document.languageId, sourceEditor.document.lineCount);
+  if (!snapshotUri) {
+    vscode.window.showWarningMessage('Open this file inside a workspace before saving an explanation snapshot.');
+    return;
+  }
+
+  vscode.window.showInformationMessage(`Saved explanation snapshot: ${vscode.workspace.asRelativePath(snapshotUri)}`);
+}
+
+async function explainFolder(context: vscode.ExtensionContext): Promise<void> {
+  const selected = await vscode.window.showOpenDialog({
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+    openLabel: 'Explain Folder'
+  });
+
+  const folder = selected?.[0];
+  if (!folder) {
+    return;
+  }
+
+  await explainUriSet(context, await findExplainableFiles(folder));
+}
+
+async function explainWorkspace(context: vscode.ExtensionContext): Promise<void> {
+  await explainUriSet(context, await findExplainableFiles());
+}
+
 async function adjustSyncOffset(delta: number): Promise<void> {
   const config = getCodeExplainerConfig();
   const nextOffset = config.syncLineOffset + delta;
@@ -298,6 +364,74 @@ function markStaleIfExplained(document: vscode.TextDocument): void {
     diagnosticsController.clear(document.uri);
     vscode.window.setStatusBarMessage('Code Explainer: explanation is stale. Run Refresh Explanation.', 6000);
   }
+}
+
+async function handleSavedDocument(context: vscode.ExtensionContext, document: vscode.TextDocument): Promise<void> {
+  if (document.uri.scheme !== 'file') {
+    return;
+  }
+
+  const config = getCodeExplainerConfig();
+  if (isExcluded(document.uri, config.excludedGlobs)) {
+    return;
+  }
+
+  const existing = store.getBySource(document.uri);
+  let snapshot: Awaited<ReturnType<typeof readSnapshot>> | undefined;
+  try {
+    snapshot = config.persistExplanations ? await readSnapshot(document.uri, config) : undefined;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    vscode.window.setStatusBarMessage(`Code Explainer: could not read snapshot (${message}).`, 6000);
+  }
+  if (!existing && !snapshot) {
+    return;
+  }
+
+  const contentHash = hashText(document.getText());
+  const existingIsFresh = Boolean(
+    existing &&
+      existing.key.contentHash === contentHash &&
+      existing.key.level === config.explanationLevel &&
+      existing.key.reviewEnabled === config.reviewEnabled &&
+      existing.key.model === config.model
+  );
+  const snapshotIsFresh = Boolean(snapshot && snapshotMatches(snapshot, contentHash, config, document.lineCount));
+  if (existingIsFresh || snapshotIsFresh) {
+    return;
+  }
+
+  if (config.autoRegenerateOnSave) {
+    await revealDocumentForGeneration(document);
+    await explainCurrentFile(context, true);
+    return;
+  }
+
+  const promptKey = document.uri.toString();
+  if (staleSavePromptInFlight.has(promptKey)) {
+    return;
+  }
+
+  staleSavePromptInFlight.add(promptKey);
+  try {
+    const action = await vscode.window.showInformationMessage(
+      `Code Explainer snapshot is stale for ${vscode.workspace.asRelativePath(document.uri)}.`,
+      'Regenerate'
+    );
+    if (action === 'Regenerate') {
+      await revealDocumentForGeneration(document);
+      await explainCurrentFile(context, true);
+    }
+  } finally {
+    staleSavePromptInFlight.delete(promptKey);
+  }
+}
+
+async function revealDocumentForGeneration(document: vscode.TextDocument): Promise<void> {
+  activeSourceEditor = await vscode.window.showTextDocument(document, {
+    preview: false,
+    preserveFocus: false
+  });
 }
 
 function isExcluded(uri: vscode.Uri, globs: string[]): boolean {
@@ -470,4 +604,70 @@ function resolveRightPanelAnchorLine(sourceLine: number | undefined): number | u
   }
 
   return resolveExplanationAnchorLine(stored.rendered.lines, sourceLine);
+}
+
+async function findExplainableFiles(folder?: vscode.Uri): Promise<vscode.Uri[]> {
+  const config = getCodeExplainerConfig();
+  const seen = new Set<string>();
+  const result: vscode.Uri[] = [];
+
+  for (const includeGlob of config.includeGlobs) {
+    const pattern = folder ? new vscode.RelativePattern(folder.fsPath, includeGlob) : includeGlob;
+    const matches = await vscode.workspace.findFiles(pattern);
+    for (const uri of matches) {
+      const key = uri.toString();
+      if (seen.has(key) || isExcluded(uri, config.excludedGlobs)) {
+        continue;
+      }
+
+      seen.add(key);
+      result.push(uri);
+    }
+  }
+
+  return result.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
+}
+
+async function explainUriSet(context: vscode.ExtensionContext, uris: vscode.Uri[]): Promise<void> {
+  if (uris.length === 0) {
+    vscode.window.showInformationMessage('No explainable files matched the configured includeGlobs.');
+    return;
+  }
+
+  const answer = await vscode.window.showWarningMessage(
+    `Explain ${uris.length} file${uris.length === 1 ? '' : 's'}? Fresh snapshots will be reused, but stale or missing snapshots may call the OpenAI API.`,
+    { modal: true },
+    'Continue'
+  );
+
+  if (answer !== 'Continue') {
+    return;
+  }
+
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: 'Code Explainer batch',
+      cancellable: true
+    },
+    async (progress, token) => {
+      for (let index = 0; index < uris.length; index += 1) {
+        if (token.isCancellationRequested) {
+          break;
+        }
+
+        const uri = uris[index];
+        progress.report({
+          message: `${index + 1}/${uris.length}: ${vscode.workspace.asRelativePath(uri)}`
+        });
+        const document = await vscode.workspace.openTextDocument(uri);
+        const editor = await vscode.window.showTextDocument(document, {
+          preview: false,
+          preserveFocus: false
+        });
+        await explainCurrentFile(context);
+        activeSourceEditor = editor;
+      }
+    }
+  );
 }

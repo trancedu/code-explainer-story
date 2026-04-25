@@ -9,6 +9,9 @@ Code Explainer opens a source file beside a generated English explanation. The s
 - `Code Explainer: Set Explanation Level`
 - `Code Explainer: Toggle Review Mode`
 - `Code Explainer: Clear Cache`
+- `Code Explainer: Save Current Explanation Snapshot`
+- `Code Explainer: Explain Folder`
+- `Code Explainer: Explain Workspace`
 - `Code Explainer: Increase Sync Offset`
 - `Code Explainer: Decrease Sync Offset`
 - `Code Explainer: Reset Sync Offset`
@@ -26,6 +29,12 @@ Explanations are streamed into the right pane as chunk objects complete. Tests m
 `codeExplainer.maxChunkLines` defaults to `10`, so even a long function receives periodic flow explanations instead of one giant summary. Medium mode is always capped at 10 source lines per chunk and can show a few important line notes per chunk; concise mode stays summary-only. Detailed mode can show line-level explanations, but blank and comment-only source lines are always kept empty.
 
 Long explanation rows are wrapped around 80 characters when there are empty explanation rows below them in the same chunk. Wrapping never spills into the next chunk; if no empty row is available, the remaining text is appended to the chunk tail.
+
+Successful explanations are saved under `.code-explainer/explanations/` by default. The folder mirrors your source tree, for example `backend/main.py` becomes `.code-explainer/explanations/backend/main.py.medium.json`. These JSON snapshots include the source hash, model, level, review mode, line-aligned explanation text, and review findings. Fresh snapshots are loaded before calling the API, so teammates can commit the folder and avoid regenerating unchanged explanations.
+
+`Code Explainer: Explain Folder` and `Code Explainer: Explain Workspace` use `codeExplainer.includeGlobs`, skip `codeExplainer.excludedGlobs`, and ask for confirmation before processing multiple files.
+
+When a saved source file has an existing in-memory explanation or snapshot, Code Explainer detects that the saved content hash no longer matches and prompts to regenerate it. Set `codeExplainer.autoRegenerateOnSave` to `true` if you want that refresh to happen automatically on save; it defaults to `false` to avoid surprise API usage.
 
 ## API Key
 
