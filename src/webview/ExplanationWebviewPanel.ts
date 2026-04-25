@@ -282,7 +282,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 
     .lines {
       min-width: max-content;
-      padding-bottom: 40px;
+      padding-bottom: max(40px, calc(100vh - var(--header-height) - var(--line-height)));
     }
 
     .line {
