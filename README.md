@@ -8,8 +8,18 @@ Code Explainer opens a source file beside a generated English explanation. The s
 - `Code Explainer: Refresh Explanation`
 - `Code Explainer: Set Explanation Level`
 - `Code Explainer: Toggle Review Mode`
+- `Code Explainer: Clear Cache`
+- `Code Explainer: Increase Sync Offset`
+- `Code Explainer: Decrease Sync Offset`
+- `Code Explainer: Reset Sync Offset`
 - `Code Explainer: Set OpenAI API Key`
 - `Code Explainer: Clear OpenAI API Key`
+
+When an explanation document is open, the editor title bar also shows quick actions for refresh, level, review, cache, and sync offset. The status bar shows the current level, review mode, and offset.
+
+`codeExplainer.syncLineOffset` calibrates visual scroll alignment when the source editor has extra top content such as breadcrumbs, CodeLens, or blame annotations. The default is `+2`; use the offset commands if your right pane is still a line or two high/low.
+
+Explanations are streamed into the right pane as chunk objects complete. Tests mock this behavior and never call the OpenAI API.
 
 ## API Key
 
@@ -25,4 +35,3 @@ npm test
 ```
 
 Tests mock the OpenAI request path and do not call the API.
-
