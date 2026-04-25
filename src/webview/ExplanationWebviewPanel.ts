@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { CodeExplainerConfig } from '../config';
 import { StoredExplanation } from '../state/ExplanationStore';
-import { lineToScrollTop, scrollTopToLine } from '../sync/scrollMath';
+import { lineToScrollTop } from '../sync/scrollMath';
 
 export type ExplanationWebviewCommand =
   | { command: 'refresh' }
@@ -294,8 +294,15 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
     }
 
     .line.active {
-      background: var(--vscode-editor-lineHighlightBackground);
-      outline: 1px solid var(--vscode-editor-lineHighlightBorder, transparent);
+      background: var(--vscode-editor-selectionBackground);
+      background: color-mix(in srgb, var(--vscode-editor-selectionBackground) 62%, transparent);
+      outline: 1px solid var(--vscode-focusBorder);
+      box-shadow: inset 3px 0 0 var(--vscode-focusBorder);
+    }
+
+    .line.active .gutter {
+      color: var(--vscode-editor-foreground);
+      font-weight: 700;
     }
 
     .gutter {
@@ -368,7 +375,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       }
 
       scrollTimer = setTimeout(() => {
-        const line = ${scrollTopToLine.toString()}(content.scrollTop, measuredLineHeight, state.lines.length) + 1;
+        const line = scrollTopToLine(content.scrollTop, measuredLineHeight, state.lines.length) + 1;
         vscode.postMessage({ type: 'visibleLineChanged', line });
       }, 50);
     });
@@ -456,6 +463,12 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 
       const row = document.querySelector('.line[data-line="' + state.activeLine + '"]');
       row?.classList.add('active');
+    }
+
+    function scrollTopToLine(scrollTop, lineHeight, lineCount) {
+      const maxLine = Math.max(0, lineCount - 1);
+      const rawLine = Math.round(scrollTop / Math.max(1, lineHeight));
+      return Math.max(0, Math.min(maxLine, rawLine));
     }
 
     render();

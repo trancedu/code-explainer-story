@@ -138,6 +138,45 @@ test('renderExplanation uses chunk-flow summaries for concise and medium modes',
   assert.equal(rendered.lines[3], '');
 });
 
+test('renderExplanation includes a few important line notes in medium mode', () => {
+  const source = [
+    'def choose(value):',
+    '    if value > 10:',
+    '        return "large"',
+    '    if value < 0:',
+    '        raise ValueError("negative")',
+    '    return "ok"'
+  ].join('\n');
+  const response: ExplanationResponse = {
+    fileSummary: 'Example',
+    chunks: [
+      {
+        id: 'chunk-1-1',
+        startLine: 1,
+        endLine: 6,
+        summary: 'Chooses a label after validating the input range.',
+        lines: [
+          { line: 2, text: 'Branches when the value is above the high threshold.' },
+          { line: 5, text: 'Rejects negative input instead of returning a normal label.' },
+          { line: 6, text: 'Falls back to the normal label.' }
+        ],
+        review: []
+      }
+    ]
+  };
+
+  const rendered = renderExplanation(6, response, {
+    sourceText: source,
+    languageId: 'python',
+    level: 'medium'
+  });
+
+  assert.match(rendered.lines[0], /Chooses a label/);
+  assert.match(rendered.lines[1], /Branches/);
+  assert.match(rendered.lines[4], /Rejects negative/);
+  assert.equal(rendered.lines[5], '');
+});
+
 test('renderExplanation anchors chunk summaries to the first meaningful line', () => {
   const source = [
     '',

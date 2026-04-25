@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { buildChunks } from './analysis/Chunker';
+import { effectiveMaxChunkLines } from './analysis/chunkLimits';
 import { renderExplanation, renderPendingExplanation } from './analysis/postProcess';
 import { getCodeExplainerConfig, setExplanationLevel, setReviewEnabled, setSyncLineOffset } from './config';
 import { clearOpenAIKey, resolveOpenAIKey, storeOpenAIKey } from './devEnv';
@@ -131,7 +132,8 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
         }
       }
 
-      const chunks = await buildChunks(document, config.maxChunkLines);
+      const chunkLineLimit = effectiveMaxChunkLines(config.explanationLevel, config.maxChunkLines);
+      const chunks = await buildChunks(document, chunkLineLimit);
       const payload: FilePayload = {
         fileName: config.includeFullPath ? document.uri.fsPath : path.basename(document.uri.fsPath),
         languageId: document.languageId,

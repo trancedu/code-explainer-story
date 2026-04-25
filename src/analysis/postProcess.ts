@@ -17,7 +17,8 @@ export function renderExplanation(
   const sourceLines = options.sourceText === undefined ? undefined : splitSourceLines(options.sourceText);
   const languageId = options.languageId ?? 'plaintext';
   const level = options.level ?? 'detailed';
-  const flowMode = level === 'concise' || level === 'medium';
+  const summaryOnlyMode = level === 'concise';
+  const mediumMode = level === 'medium';
 
   for (const chunk of response.chunks) {
     const start = clamp(chunk.startLine, 1, lineCount);
@@ -30,11 +31,23 @@ export function renderExplanation(
       lines[anchor - 1] = sanitizeLine(chunk.summary);
     }
 
-    if (!flowMode) {
+    const mediumLineNoteLimit = mediumMode ? getMediumLineNoteLimit(start, end) : Number.POSITIVE_INFINITY;
+    let mediumLineNotesRendered = 0;
+
+    if (!summaryOnlyMode) {
       for (const item of chunk.lines) {
         const lineNumber = clamp(item.line, 1, lineCount);
         if (isIgnorableLine(sourceLines, languageId, lineNumber)) {
           continue;
+        }
+
+        if (mediumMode) {
+          if (mediumLineNotesRendered >= mediumLineNoteLimit) {
+            continue;
+          }
+          if (sourceLines && isSimpleGroupedLine(sourceLines[lineNumber - 1] ?? '', languageId)) {
+            continue;
+          }
         }
 
         const lineIndex = lineNumber - 1;
@@ -43,6 +56,7 @@ export function renderExplanation(
           continue;
         }
         lines[lineIndex] = lines[lineIndex] ? `${lines[lineIndex]}  ${text}` : text;
+        mediumLineNotesRendered += mediumMode ? 1 : 0;
       }
     }
 
@@ -129,4 +143,37 @@ function clearIgnorableRows(lines: string[], sourceLines: string[], languageId: 
 
 function isBlankOrCommentNarration(text: string): boolean {
   return /^(blank line|empty line|comment\b|section comment\b|comment marking\b|comment continuing\b)/i.test(text);
+}
+
+function getMediumLineNoteLimit(startLine: number, endLine: number): number {
+  const chunkLineCount = Math.max(1, endLine - startLine + 1);
+  return Math.max(2, Math.min(4, Math.ceil(chunkLineCount / 4)));
+}
+
+function isSimpleGroupedLine(line: string, languageId: string): boolean {
+  const trimmed = line.trim();
+
+  if (languageId === 'python') {
+    return (
+      /^from\s+\S+\s+import\s+/.test(trimmed) ||
+      /^import\s+\S+/.test(trimmed) ||
+      /^\w+\s*:\s*[\w.[\]'"|, ]+$/.test(trimmed) ||
+      /^self\.\w+\s*=/.test(trimmed)
+    );
+  }
+
+  if (languageId === 'r') {
+    return /^library\s*\(/.test(trimmed) || /^\w[\w.]*\s*(<-|=)\s*[^({]+$/.test(trimmed);
+  }
+
+  if (['typescript', 'typescriptreact', 'javascript', 'javascriptreact'].includes(languageId)) {
+    return (
+      /^import\s+/.test(trimmed) ||
+      /^(export\s+)?(type|interface)\s+\w+/.test(trimmed) ||
+      /^\w+\??:\s*[\w.[\]'"|, <>]+[,;]?$/.test(trimmed) ||
+      /^(const|let|var)\s+\w+\s*=/.test(trimmed)
+    );
+  }
+
+  return false;
 }

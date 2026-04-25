@@ -26,7 +26,7 @@ const systemPrompt = [
   'Never write text such as "blank line", "empty line", "comment marking", or "comment continuing".',
   'Do not invent code behavior. State uncertainty briefly when needed.',
   'For concise level, write a compact flow summary in each chunk summary and keep lines sparse or empty.',
-  'For medium level, explain the chunk flow and important decisions; do not narrate every field, import, or simple assignment line.',
+  'For medium level, every chunk should have a useful multi-clause summary plus two to four line notes for important nontrivial lines when present. Do not narrate every field, import, or simple assignment line.',
   'For detailed level, explain meaningful executable or declarative code lines, but still skip blank and comment-only lines.',
   'Treat adjacent class fields, schema fields, object properties, imports, and constant declarations as a group when possible.',
   'If reviewEnabled is false, return empty review arrays.',
