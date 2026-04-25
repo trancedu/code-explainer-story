@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+node_modules/
+out/
+*.vsix
+.DS_Store
+.vscode-test/
+npm-debug.log*
+

@@ -1,0 +1,142 @@
+{
+  "name": "code-explainer",
+  "displayName": "Code Explainer",
+  "description": "Side-by-side, line-synced code explanations for VS Code.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "private": true,
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:codeExplainer.explainCurrentFile",
+    "onCommand:codeExplainer.refreshExplanation",
+    "onCommand:codeExplainer.setExplanationLevel",
+    "onCommand:codeExplainer.toggleReviewMode",
+    "onCommand:codeExplainer.setOpenAIKey",
+    "onCommand:codeExplainer.clearOpenAIKey"
+  ],
+  "main": "./out/src/extension.js",
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "test": "npm run compile && node --test out/test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.96.0",
+    "typescript": "^5.7.0"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeExplainer.explainCurrentFile",
+        "title": "Code Explainer: Explain Current File"
+      },
+      {
+        "command": "codeExplainer.refreshExplanation",
+        "title": "Code Explainer: Refresh Explanation"
+      },
+      {
+        "command": "codeExplainer.setExplanationLevel",
+        "title": "Code Explainer: Set Explanation Level"
+      },
+      {
+        "command": "codeExplainer.toggleReviewMode",
+        "title": "Code Explainer: Toggle Review Mode"
+      },
+      {
+        "command": "codeExplainer.setOpenAIKey",
+        "title": "Code Explainer: Set OpenAI API Key"
+      },
+      {
+        "command": "codeExplainer.clearOpenAIKey",
+        "title": "Code Explainer: Clear OpenAI API Key"
+      }
+    ],
+    "configuration": {
+      "title": "Code Explainer",
+      "properties": {
+        "codeExplainer.model": {
+          "type": "string",
+          "default": "gpt-5.4-mini",
+          "description": "OpenAI model used for code explanations."
+        },
+        "codeExplainer.explanationLevel": {
+          "type": "string",
+          "enum": [
+            "concise",
+            "medium",
+            "detailed"
+          ],
+          "default": "medium",
+          "description": "How much detail to include in explanations."
+        },
+        "codeExplainer.reviewEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include review findings alongside explanations."
+        },
+        "codeExplainer.maxFileLines": {
+          "type": "number",
+          "default": 3000,
+          "minimum": 1,
+          "description": "Maximum source lines allowed for one-call file explanation."
+        },
+        "codeExplainer.maxChunkLines": {
+          "type": "number",
+          "default": 120,
+          "minimum": 20,
+          "description": "Maximum source lines per chunk sent inside the one-file request."
+        },
+        "codeExplainer.cacheExplanations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reuse in-memory explanations for unchanged files and settings."
+        },
+        "codeExplainer.privacy.includeFullPath": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include the full file path in the model request. When false, only the basename is sent."
+        },
+        "codeExplainer.excludedGlobs": {
+          "type": "array",
+          "default": [
+            "**/.env",
+            "**/node_modules/**",
+            "**/.git/**",
+            "**/dist/**",
+            "**/build/**"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob patterns that should not be explained."
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "code-explainer-output",
+        "aliases": [
+          "Code Explainer Output"
+        ],
+        "extensions": [
+          ".code-explainer"
+        ]
+      }
+    ],
+    "configurationDefaults": {
+      "[code-explainer-output]": {
+        "editor.wordWrap": "off",
+        "editor.lineNumbers": "on",
+        "editor.minimap.enabled": false,
+        "editor.renderWhitespace": "none"
+      }
+    }
+  }
+}
+
