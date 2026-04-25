@@ -5,5 +5,5 @@ src/
 test/
 tsconfig.json
 *.map
+out/**/*.map
 .vscode-test/
-

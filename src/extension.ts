@@ -10,6 +10,7 @@ import { DiagnosticsController } from './review/DiagnosticsController';
 import { ExplanationStore, hashText } from './state/ExplanationStore';
 import { ExplanationLevel, FilePayload } from './types';
 import { ScrollSyncController } from './sync/ScrollSyncController';
+import { matchesAnyGlob } from './path/globs';
 
 let store: ExplanationStore;
 let provider: ExplanationDocumentProvider;
@@ -199,16 +200,7 @@ function markStaleIfExplained(document: vscode.TextDocument): void {
 }
 
 function isExcluded(uri: vscode.Uri, globs: string[]): boolean {
-  const normalized = uri.fsPath.replaceAll(path.sep, '/');
-  return globs.some((glob) => globMatches(normalized, glob));
-}
-
-function globMatches(filePath: string, glob: string): boolean {
-  const escaped = glob
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '.*')
-    .replace(/\*/g, '[^/]*');
-  return new RegExp(`^${escaped}$`).test(filePath) || new RegExp(`${escaped}$`).test(filePath);
+  return matchesAnyGlob(uri.fsPath.replaceAll(path.sep, '/'), globs);
 }
 
 function isExplanationLevel(value: string): value is ExplanationLevel {

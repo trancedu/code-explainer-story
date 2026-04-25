@@ -14,6 +14,7 @@ export type StoredExplanation = {
 export class ExplanationStore {
   private readonly byId = new Map<string, StoredExplanation>();
   private readonly cache = new Map<string, StoredExplanation>();
+  private readonly latestBySource = new Map<string, string>();
 
   put(
     key: ExplanationRequestKey,
@@ -21,12 +22,6 @@ export class ExplanationStore {
     rendered: RenderedExplanation,
     useCache: boolean
   ): StoredExplanation {
-    const cacheKey = stableKey(key);
-    const cached = this.cache.get(cacheKey);
-    if (useCache && cached) {
-      return cached;
-    }
-
     const id = crypto.randomUUID();
     const sourceBase = path.basename(sourceUri.fsPath || sourceUri.path || 'source');
     const explanationUri = vscode.Uri.from({
@@ -44,8 +39,9 @@ export class ExplanationStore {
     };
 
     this.byId.set(id, stored);
+    this.latestBySource.set(sourceUri.toString(), id);
     if (useCache) {
-      this.cache.set(cacheKey, stored);
+      this.cache.set(stableKey(key), stored);
     }
 
     return stored;
@@ -57,14 +53,8 @@ export class ExplanationStore {
   }
 
   getBySource(sourceUri: vscode.Uri): StoredExplanation | undefined {
-    const source = sourceUri.toString();
-    for (const stored of this.byId.values()) {
-      if (stored.sourceUri.toString() === source) {
-        return stored;
-      }
-    }
-
-    return undefined;
+    const id = this.latestBySource.get(sourceUri.toString());
+    return id ? this.byId.get(id) : undefined;
   }
 }
 
@@ -75,4 +65,3 @@ function stableKey(key: ExplanationRequestKey): string {
 export function hashText(text: string): string {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
-
