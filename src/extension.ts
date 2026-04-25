@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { buildChunks } from './analysis/Chunker';
 import { effectiveMaxChunkLines } from './analysis/chunkLimits';
+import { resolveExplanationAnchorLine } from './analysis/explanationAnchors';
 import { renderExplanation, renderPendingExplanation } from './analysis/postProcess';
 import { getCodeExplainerConfig, setExplanationLevel, setReviewEnabled, setSyncLineOffset } from './config';
 import { clearOpenAIKey, resolveOpenAIKey, storeOpenAIKey } from './devEnv';
@@ -382,7 +383,7 @@ function handleSourceSelectionChanged(event: vscode.TextEditorSelectionChangeEve
 function updateActiveLineFromEditor(editor: vscode.TextEditor): void {
   activeSourceEditor = editor;
   activeSourceLine = editor.selection.active.line + 1;
-  activeExplanationPanel?.setActiveLine(activeSourceLine);
+  activeExplanationPanel?.setActiveLine(resolveRightPanelAnchorLine(activeSourceLine));
 }
 
 function handleWebviewVisibleLineChanged(line: number): void {
@@ -454,6 +455,19 @@ function refreshSettingsDisplay(): void {
   const stored = activeSourceEditor ? store.getBySource(activeSourceEditor.document.uri) : undefined;
   if (stored) {
     activeExplanationPanel?.update(stored, config, getEditorMetrics());
-    activeExplanationPanel?.setActiveLine(activeSourceLine);
+    activeExplanationPanel?.setActiveLine(resolveRightPanelAnchorLine(activeSourceLine));
   }
+}
+
+function resolveRightPanelAnchorLine(sourceLine: number | undefined): number | undefined {
+  if (sourceLine === undefined || !activeSourceEditor) {
+    return sourceLine;
+  }
+
+  const stored = store.getBySource(activeSourceEditor.document.uri);
+  if (!stored) {
+    return sourceLine;
+  }
+
+  return resolveExplanationAnchorLine(stored.rendered.lines, sourceLine);
 }
