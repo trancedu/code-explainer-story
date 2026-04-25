@@ -72,13 +72,13 @@ export function validateExplanationResponse(value: unknown): ExplanationResponse
   }
 
   for (const chunk of value.chunks) {
-    validateChunk(chunk);
+    validateExplanationChunk(chunk);
   }
 
   return value as ExplanationResponse;
 }
 
-function validateChunk(value: unknown): void {
+export function validateExplanationChunk(value: unknown): ExplanationResponse['chunks'][number] {
   if (!isObject(value)) {
     throw new Error('OpenAI response contains an invalid chunk.');
   }
@@ -113,9 +113,10 @@ function validateChunk(value: unknown): void {
       throw new Error('OpenAI response contains an invalid review item.');
     }
   }
+
+  return value as ExplanationResponse['chunks'][number];
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
-

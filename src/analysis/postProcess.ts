@@ -38,6 +38,20 @@ export function renderExplanation(lineCount: number, response: ExplanationRespon
   };
 }
 
+export function renderPendingExplanation(lineCount: number, message: string): RenderedExplanation {
+  const lines = Array.from({ length: lineCount }, () => '');
+  if (lines.length > 0) {
+    lines[0] = sanitizeLine(message);
+  }
+
+  return {
+    text: lines.join('\n'),
+    lines,
+    reviewItems: [],
+    fileSummary: sanitizeLine(message)
+  };
+}
+
 export function sanitizeLine(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
@@ -67,4 +81,3 @@ function hasAnyLineText(lines: string[], startLine: number, endLine: number): bo
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
-

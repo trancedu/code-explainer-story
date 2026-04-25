@@ -56,6 +56,24 @@ export class ExplanationStore {
     const id = this.latestBySource.get(sourceUri.toString());
     return id ? this.byId.get(id) : undefined;
   }
+
+  update(id: string, rendered: RenderedExplanation, updateCache: boolean): StoredExplanation | undefined {
+    const stored = this.byId.get(id);
+    if (!stored) {
+      return undefined;
+    }
+
+    stored.rendered = rendered;
+    if (updateCache) {
+      this.cache.set(stableKey(stored.key), stored);
+    }
+
+    return stored;
+  }
+
+  clearCache(): void {
+    this.cache.clear();
+  }
 }
 
 function stableKey(key: ExplanationRequestKey): string {

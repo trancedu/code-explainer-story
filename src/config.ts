@@ -5,6 +5,7 @@ export type CodeExplainerConfig = {
   model: string;
   explanationLevel: ExplanationLevel;
   reviewEnabled: boolean;
+  syncLineOffset: number;
   maxFileLines: number;
   maxChunkLines: number;
   cacheExplanations: boolean;
@@ -22,6 +23,7 @@ export function getCodeExplainerConfig(): CodeExplainerConfig {
     model: config.get<string>('model', 'gpt-5.4-mini'),
     explanationLevel: levels.has(level as ExplanationLevel) ? (level as ExplanationLevel) : 'medium',
     reviewEnabled: config.get<boolean>('reviewEnabled', false),
+    syncLineOffset: config.get<number>('syncLineOffset', 2),
     maxFileLines: config.get<number>('maxFileLines', 3000),
     maxChunkLines: config.get<number>('maxChunkLines', 120),
     cacheExplanations: config.get<boolean>('cacheExplanations', true),
@@ -42,3 +44,8 @@ export async function setReviewEnabled(enabled: boolean): Promise<void> {
     .update('reviewEnabled', enabled, vscode.ConfigurationTarget.Global);
 }
 
+export async function setSyncLineOffset(offset: number): Promise<void> {
+  await vscode.workspace
+    .getConfiguration('codeExplainer')
+    .update('syncLineOffset', Math.max(-20, Math.min(20, offset)), vscode.ConfigurationTarget.Global);
+}

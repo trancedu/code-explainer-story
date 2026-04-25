@@ -16,6 +16,10 @@
     "onCommand:codeExplainer.refreshExplanation",
     "onCommand:codeExplainer.setExplanationLevel",
     "onCommand:codeExplainer.toggleReviewMode",
+    "onCommand:codeExplainer.clearCache",
+    "onCommand:codeExplainer.increaseSyncOffset",
+    "onCommand:codeExplainer.decreaseSyncOffset",
+    "onCommand:codeExplainer.resetSyncOffset",
     "onCommand:codeExplainer.setOpenAIKey",
     "onCommand:codeExplainer.clearOpenAIKey"
   ],
@@ -34,19 +38,43 @@
     "commands": [
       {
         "command": "codeExplainer.explainCurrentFile",
-        "title": "Code Explainer: Explain Current File"
+        "title": "Code Explainer: Explain Current File",
+        "icon": "$(book)"
       },
       {
         "command": "codeExplainer.refreshExplanation",
-        "title": "Code Explainer: Refresh Explanation"
+        "title": "Code Explainer: Refresh Explanation",
+        "icon": "$(refresh)"
       },
       {
         "command": "codeExplainer.setExplanationLevel",
-        "title": "Code Explainer: Set Explanation Level"
+        "title": "Code Explainer: Set Explanation Level",
+        "icon": "$(list-selection)"
       },
       {
         "command": "codeExplainer.toggleReviewMode",
-        "title": "Code Explainer: Toggle Review Mode"
+        "title": "Code Explainer: Toggle Review Mode",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "codeExplainer.clearCache",
+        "title": "Code Explainer: Clear Cache",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "codeExplainer.increaseSyncOffset",
+        "title": "Code Explainer: Increase Sync Offset",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "codeExplainer.decreaseSyncOffset",
+        "title": "Code Explainer: Decrease Sync Offset",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "codeExplainer.resetSyncOffset",
+        "title": "Code Explainer: Reset Sync Offset",
+        "icon": "$(debug-restart)"
       },
       {
         "command": "codeExplainer.setOpenAIKey",
@@ -79,6 +107,13 @@
           "type": "boolean",
           "default": false,
           "description": "Include review findings alongside explanations."
+        },
+        "codeExplainer.syncLineOffset": {
+          "type": "number",
+          "default": 2,
+          "minimum": -20,
+          "maximum": 20,
+          "description": "Line calibration applied while syncing source and explanation panes. Positive values scroll the explanation farther down from source events."
         },
         "codeExplainer.maxFileLines": {
           "type": "number",
@@ -117,6 +152,45 @@
           "description": "Glob patterns that should not be explained."
         }
       }
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "codeExplainer.refreshExplanation",
+          "when": "resourceScheme == code-explainer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "codeExplainer.setExplanationLevel",
+          "when": "resourceScheme == code-explainer",
+          "group": "navigation@2"
+        },
+        {
+          "command": "codeExplainer.toggleReviewMode",
+          "when": "resourceScheme == code-explainer",
+          "group": "navigation@3"
+        },
+        {
+          "command": "codeExplainer.clearCache",
+          "when": "resourceScheme == code-explainer",
+          "group": "navigation@4"
+        },
+        {
+          "command": "codeExplainer.decreaseSyncOffset",
+          "when": "resourceScheme == code-explainer",
+          "group": "2_sync@1"
+        },
+        {
+          "command": "codeExplainer.increaseSyncOffset",
+          "when": "resourceScheme == code-explainer",
+          "group": "2_sync@2"
+        },
+        {
+          "command": "codeExplainer.resetSyncOffset",
+          "when": "resourceScheme == code-explainer",
+          "group": "2_sync@3"
+        }
+      ]
     },
     "languages": [
       {

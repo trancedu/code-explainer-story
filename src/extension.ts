@@ -1,45 +1,59 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { buildChunks } from './analysis/Chunker';
-import { renderExplanation } from './analysis/postProcess';
-import { getCodeExplainerConfig, setExplanationLevel, setReviewEnabled } from './config';
+import { renderExplanation, renderPendingExplanation } from './analysis/postProcess';
+import { getCodeExplainerConfig, setExplanationLevel, setReviewEnabled, setSyncLineOffset } from './config';
 import { clearOpenAIKey, resolveOpenAIKey, storeOpenAIKey } from './devEnv';
 import { OpenAIClient } from './openai/OpenAIClient';
 import { ExplanationDocumentProvider } from './providers/ExplanationDocumentProvider';
 import { DiagnosticsController } from './review/DiagnosticsController';
 import { ExplanationStore, hashText } from './state/ExplanationStore';
-import { ExplanationLevel, FilePayload } from './types';
+import { ExplanationChunk, ExplanationLevel, FilePayload } from './types';
 import { ScrollSyncController } from './sync/ScrollSyncController';
 import { matchesAnyGlob } from './path/globs';
+import { StatusBarController } from './ui/StatusBarController';
 
 let store: ExplanationStore;
 let provider: ExplanationDocumentProvider;
 let syncController: ScrollSyncController;
 let diagnosticsController: DiagnosticsController;
+let statusBarController: StatusBarController;
 
 export function activate(context: vscode.ExtensionContext): void {
   store = new ExplanationStore();
   provider = new ExplanationDocumentProvider(store);
-  syncController = new ScrollSyncController();
+  syncController = new ScrollSyncController(() => getCodeExplainerConfig().syncLineOffset);
   diagnosticsController = new DiagnosticsController();
+  statusBarController = new StatusBarController(getCodeExplainerConfig());
 
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider('code-explainer', provider),
     syncController,
     diagnosticsController,
+    statusBarController,
     vscode.commands.registerCommand('codeExplainer.explainCurrentFile', () => explainCurrentFile(context)),
     vscode.commands.registerCommand('codeExplainer.refreshExplanation', () => explainCurrentFile(context, true)),
     vscode.commands.registerCommand('codeExplainer.setExplanationLevel', chooseExplanationLevel),
     vscode.commands.registerCommand('codeExplainer.toggleReviewMode', toggleReviewMode),
+    vscode.commands.registerCommand('codeExplainer.clearCache', clearCache),
+    vscode.commands.registerCommand('codeExplainer.increaseSyncOffset', () => adjustSyncOffset(1)),
+    vscode.commands.registerCommand('codeExplainer.decreaseSyncOffset', () => adjustSyncOffset(-1)),
+    vscode.commands.registerCommand('codeExplainer.resetSyncOffset', () => resetSyncOffset()),
     vscode.commands.registerCommand('codeExplainer.setOpenAIKey', () => promptForApiKey(context)),
     vscode.commands.registerCommand('codeExplainer.clearOpenAIKey', () => clearStoredApiKey(context)),
-    vscode.workspace.onDidChangeTextDocument((event) => markStaleIfExplained(event.document))
+    vscode.workspace.onDidChangeTextDocument((event) => markStaleIfExplained(event.document)),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('codeExplainer')) {
+        statusBarController.update(getCodeExplainerConfig());
+      }
+    })
   );
 }
 
 export function deactivate(): void {
   syncController?.dispose();
   diagnosticsController?.dispose();
+  statusBarController?.dispose();
 }
 
 async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh = false): Promise<void> {
@@ -119,19 +133,48 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
       const abortController = new AbortController();
       token.onCancellationRequested(() => abortController.abort());
 
-      progress.report({ message: `Asking ${config.model} for one file-level explanation...` });
-      const response = await new OpenAIClient().generateExplanation(payload, {
-        apiKey,
-        model: config.model,
-        signal: abortController.signal
-      });
-
-      progress.report({ message: 'Aligning explanation lines...' });
-      const rendered = renderExplanation(document.lineCount, response);
-      const stored = store.put(requestKey, document.uri, rendered, config.cacheExplanations);
+      const pending = renderPendingExplanation(document.lineCount, `Generating ${chunks.length} explanation chunks with ${config.model}...`);
+      const stored = store.put(requestKey, document.uri, pending, false);
       provider.refresh(stored.explanationUri);
-      diagnosticsController.update(document.uri, rendered.reviewItems);
       await openExplanation(editor, stored);
+
+      const streamedChunks = new Map<string, ExplanationChunk>();
+      const updateFromChunk = (chunk: ExplanationChunk) => {
+        streamedChunks.set(chunk.id, chunk);
+        const partial = renderExplanation(document.lineCount, {
+          fileSummary: `Generated ${streamedChunks.size} of ${chunks.length} chunks...`,
+          chunks: [...streamedChunks.values()]
+        });
+        store.update(stored.id, partial, false);
+        provider.refresh(stored.explanationUri);
+        diagnosticsController.update(document.uri, partial.reviewItems);
+        progress.report({ message: `Received ${streamedChunks.size}/${chunks.length} chunks...` });
+      };
+
+      try {
+        progress.report({ message: `Streaming one file-level explanation from ${config.model}...` });
+        const response = await new OpenAIClient().generateExplanationStream(
+          payload,
+          {
+            apiKey,
+            model: config.model,
+            signal: abortController.signal
+          },
+          updateFromChunk
+        );
+
+        progress.report({ message: 'Finalizing aligned explanation lines...' });
+        const rendered = renderExplanation(document.lineCount, response);
+        store.update(stored.id, rendered, config.cacheExplanations);
+        provider.refresh(stored.explanationUri);
+        diagnosticsController.update(document.uri, rendered.reviewItems);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const failed = renderPendingExplanation(document.lineCount, `Code Explainer failed: ${message}`);
+        store.update(stored.id, failed, false);
+        provider.refresh(stored.explanationUri);
+        vscode.window.showErrorMessage(`Code Explainer failed: ${message}`);
+      }
     }
   );
 }
@@ -158,6 +201,7 @@ async function chooseExplanationLevel(): Promise<void> {
 
   if (selected && isExplanationLevel(selected)) {
     await setExplanationLevel(selected);
+    statusBarController.update(getCodeExplainerConfig());
     vscode.window.showInformationMessage(`Code Explainer level set to ${selected}.`);
   }
 }
@@ -166,7 +210,28 @@ async function toggleReviewMode(): Promise<void> {
   const config = getCodeExplainerConfig();
   const nextValue = !config.reviewEnabled;
   await setReviewEnabled(nextValue);
+  statusBarController.update(getCodeExplainerConfig());
   vscode.window.showInformationMessage(`Code Explainer review mode ${nextValue ? 'enabled' : 'disabled'}.`);
+}
+
+function clearCache(): void {
+  store.clearCache();
+  vscode.window.showInformationMessage('Code Explainer cache cleared.');
+}
+
+async function adjustSyncOffset(delta: number): Promise<void> {
+  const config = getCodeExplainerConfig();
+  const nextOffset = config.syncLineOffset + delta;
+  await setSyncLineOffset(nextOffset);
+  statusBarController.update(getCodeExplainerConfig());
+  const offset = getCodeExplainerConfig().syncLineOffset;
+  vscode.window.showInformationMessage(`Code Explainer sync offset set to ${formatOffset(offset)} line${Math.abs(offset) === 1 ? '' : 's'}.`);
+}
+
+async function resetSyncOffset(): Promise<void> {
+  await setSyncLineOffset(0);
+  statusBarController.update(getCodeExplainerConfig());
+  vscode.window.showInformationMessage('Code Explainer sync offset reset to 0.');
 }
 
 async function promptForApiKey(context: vscode.ExtensionContext): Promise<void> {
@@ -205,4 +270,8 @@ function isExcluded(uri: vscode.Uri, globs: string[]): boolean {
 
 function isExplanationLevel(value: string): value is ExplanationLevel {
   return value === 'concise' || value === 'medium' || value === 'detailed';
+}
+
+function formatOffset(offset: number): string {
+  return offset >= 0 ? `+${offset}` : String(offset);
 }
