@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { CodeExplainerConfig } from '../config';
 import { StoredExplanation } from '../state/ExplanationStore';
-import { ExplanationLevel, RenderedExplanation, ReviewItem } from '../types';
+import { ExplanationLevel, LLMProvider, RenderedExplanation, ReviewItem } from '../types';
 import { normalizeRelativePath, snapshotRelativePathForSource } from './snapshotPaths';
 
 export { snapshotRelativePathForSource } from './snapshotPaths';
@@ -19,6 +19,7 @@ export type ExplanationSnapshot = {
     lineCount: number;
   };
   generation: {
+    provider?: LLMProvider;
     model: string;
     level: ExplanationLevel;
     reviewEnabled: boolean;
@@ -37,14 +38,19 @@ export type SnapshotLocation = {
   workspaceRelativePath: string;
 };
 
-export function getSnapshotLocation(sourceUri: vscode.Uri, level: ExplanationLevel, reviewEnabled: boolean): SnapshotLocation | undefined {
+export function getSnapshotLocation(
+  sourceUri: vscode.Uri,
+  level: ExplanationLevel,
+  reviewEnabled: boolean,
+  provider: LLMProvider = 'openai'
+): SnapshotLocation | undefined {
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(sourceUri);
   if (!workspaceFolder) {
     return undefined;
   }
 
   const workspaceRelativePath = normalizeRelativePath(path.relative(workspaceFolder.uri.fsPath, sourceUri.fsPath));
-  const snapshotRelativePath = snapshotRelativePathForSource(workspaceRelativePath, level, reviewEnabled);
+  const snapshotRelativePath = snapshotRelativePathForSource(workspaceRelativePath, level, reviewEnabled, provider);
   return {
     workspaceFolder,
     snapshotUri: vscode.Uri.joinPath(workspaceFolder.uri, snapshotRelativePath),
@@ -68,6 +74,7 @@ export function createSnapshot(
       lineCount
     },
     generation: {
+      provider: stored.key.provider,
       model: stored.key.model,
       level: stored.key.level,
       reviewEnabled: stored.key.reviewEnabled,
@@ -84,14 +91,17 @@ export function createSnapshot(
 export function snapshotMatches(
   snapshot: ExplanationSnapshot,
   contentHash: string,
-  config: Pick<CodeExplainerConfig, 'model' | 'explanationLevel' | 'reviewEnabled'>,
+  config: Pick<CodeExplainerConfig, 'provider' | 'model' | 'anthropicModel' | 'explanationLevel' | 'reviewEnabled'>,
   lineCount: number
 ): boolean {
+  const snapshotProvider = snapshot.generation.provider ?? 'openai';
+  const activeModel = config.provider === 'anthropic' ? config.anthropicModel : config.model;
   return (
     snapshot.schemaVersion === snapshotSchemaVersion &&
     snapshot.source.hash === contentHash &&
     snapshot.source.lineCount === lineCount &&
-    snapshot.generation.model === config.model &&
+    snapshotProvider === config.provider &&
+    snapshot.generation.model === activeModel &&
     snapshot.generation.level === config.explanationLevel &&
     snapshot.generation.reviewEnabled === config.reviewEnabled &&
     snapshot.explanation.lines.length === lineCount
@@ -108,7 +118,7 @@ export function renderedFromSnapshot(snapshot: ExplanationSnapshot): RenderedExp
 }
 
 export async function readSnapshot(sourceUri: vscode.Uri, config: CodeExplainerConfig): Promise<ExplanationSnapshot | undefined> {
-  const location = getSnapshotLocation(sourceUri, config.explanationLevel, config.reviewEnabled);
+  const location = getSnapshotLocation(sourceUri, config.explanationLevel, config.reviewEnabled, config.provider);
   if (!location) {
     return undefined;
   }
@@ -130,7 +140,7 @@ export async function writeSnapshot(
   languageId: string,
   lineCount: number
 ): Promise<vscode.Uri | undefined> {
-  const location = getSnapshotLocation(stored.sourceUri, stored.key.level, stored.key.reviewEnabled);
+  const location = getSnapshotLocation(stored.sourceUri, stored.key.level, stored.key.reviewEnabled, stored.key.provider);
   if (!location) {
     return undefined;
   }
@@ -155,6 +165,7 @@ export function parseSnapshot(value: unknown): ExplanationSnapshot {
     typeof snapshot.source.hash !== 'string' ||
     typeof snapshot.source.languageId !== 'string' ||
     !Number.isInteger(snapshot.source.lineCount) ||
+    (snapshot.generation.provider !== undefined && !['openai', 'anthropic'].includes(snapshot.generation.provider)) ||
     typeof snapshot.generation.model !== 'string' ||
     !['concise', 'medium', 'detailed', 'story'].includes(snapshot.generation.level) ||
     typeof snapshot.generation.reviewEnabled !== 'boolean' ||

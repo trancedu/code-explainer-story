@@ -1,5 +1,7 @@
 export type ExplanationLevel = 'concise' | 'medium' | 'detailed' | 'story';
 
+export type LLMProvider = 'openai' | 'anthropic';
+
 export type ReviewSeverity = 'info' | 'warning' | 'error';
 
 export type ReviewCategory =
@@ -68,6 +70,7 @@ export type ExplanationRequestKey = {
   sourceUri: string;
   documentVersion: number;
   contentHash: string;
+  provider: LLMProvider;
   level: ExplanationLevel;
   reviewEnabled: boolean;
   model: string;

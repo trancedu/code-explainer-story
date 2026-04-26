@@ -5,14 +5,19 @@ import { effectiveMaxChunkLines } from './analysis/chunkLimits';
 import { resolveExplanationAnchorLine } from './analysis/explanationAnchors';
 import { renderExplanation, renderPendingExplanation } from './analysis/postProcess';
 import {
+  getActiveModel,
+  getActiveModelPresets,
   getCodeExplainerConfig,
   setExplanationLevel,
+  setAnthropicModel,
   setInlineEnabled,
   setOpenAIModel,
+  setProvider,
   setReviewEnabled,
   setSyncLineOffset
 } from './config';
-import { clearOpenAIKey, resolveOpenAIKey, storeOpenAIKey } from './devEnv';
+import { AnthropicClient } from './anthropic/AnthropicClient';
+import { clearApiKey, resolveApiKey, storeApiKey } from './devEnv';
 import { InlineExplanationController } from './inline/InlineExplanationController';
 import { OpenAIClient } from './openai/OpenAIClient';
 import {
@@ -24,7 +29,7 @@ import {
 import { ExplanationDocumentProvider } from './providers/ExplanationDocumentProvider';
 import { DiagnosticsController } from './review/DiagnosticsController';
 import { ExplanationStore, StoredExplanation, hashText } from './state/ExplanationStore';
-import { ExplanationChunk, ExplanationLevel, FilePayload } from './types';
+import { ExplanationChunk, ExplanationLevel, FilePayload, LLMProvider } from './types';
 import { mapSyncTargetLine } from './sync/lineMapping';
 import { matchesAnyGlob } from './path/globs';
 import { StatusBarController } from './ui/StatusBarController';
@@ -63,7 +68,8 @@ export function activate(context: vscode.ExtensionContext): void {
     inlineController,
     vscode.commands.registerCommand('codeExplainer.explainCurrentFile', () => explainCurrentFile(context)),
     vscode.commands.registerCommand('codeExplainer.refreshExplanation', () => explainCurrentFile(context, true)),
-    vscode.commands.registerCommand('codeExplainer.setModel', chooseOpenAIModel),
+    vscode.commands.registerCommand('codeExplainer.setProvider', chooseProvider),
+    vscode.commands.registerCommand('codeExplainer.setModel', chooseModel),
     vscode.commands.registerCommand('codeExplainer.setExplanationLevel', chooseExplanationLevel),
     vscode.commands.registerCommand('codeExplainer.toggleInlineExplanations', toggleInlineExplanations),
     vscode.commands.registerCommand('codeExplainer.toggleReviewMode', toggleReviewMode),
@@ -74,8 +80,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('codeExplainer.increaseSyncOffset', () => adjustSyncOffset(1)),
     vscode.commands.registerCommand('codeExplainer.decreaseSyncOffset', () => adjustSyncOffset(-1)),
     vscode.commands.registerCommand('codeExplainer.resetSyncOffset', () => resetSyncOffset()),
-    vscode.commands.registerCommand('codeExplainer.setOpenAIKey', () => promptForApiKey(context)),
-    vscode.commands.registerCommand('codeExplainer.clearOpenAIKey', () => clearStoredApiKey(context)),
+    vscode.commands.registerCommand('codeExplainer.setOpenAIKey', () => promptForApiKey(context, 'openai')),
+    vscode.commands.registerCommand('codeExplainer.clearOpenAIKey', () => clearStoredApiKey(context, 'openai')),
+    vscode.commands.registerCommand('codeExplainer.setAnthropicKey', () => promptForApiKey(context, 'anthropic')),
+    vscode.commands.registerCommand('codeExplainer.clearAnthropicKey', () => clearStoredApiKey(context, 'anthropic')),
     vscode.workspace.onDidChangeTextDocument((event) => markStaleIfExplained(event.document)),
     vscode.workspace.onDidSaveTextDocument((document) => void handleSavedDocument(context, document)),
     vscode.window.onDidChangeTextEditorVisibleRanges((event) => handleSourceVisibleRangesChanged(event)),
@@ -120,13 +128,15 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
 
   const content = document.getText();
   const contentHash = hashText(content);
+  const activeModel = getActiveModel(config);
   const requestKey = {
     sourceUri: document.uri.toString(),
     documentVersion: document.version,
     contentHash,
+    provider: config.provider,
     level: config.explanationLevel,
     reviewEnabled: config.reviewEnabled,
-    model: config.model
+    model: activeModel
   };
 
   if (!forceRefresh && config.cacheExplanations) {
@@ -134,9 +144,10 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
     if (
       cached &&
       cached.key.contentHash === contentHash &&
+      cached.key.provider === config.provider &&
       cached.key.level === config.explanationLevel &&
       cached.key.reviewEnabled === config.reviewEnabled &&
-      cached.key.model === config.model
+      cached.key.model === activeModel
     ) {
       await openExplanation(editor, cached);
       return;
@@ -154,7 +165,7 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
     }
   }
 
-  const apiKey = await ensureOpenAIKey(context);
+  const apiKey = await ensureApiKey(context, config.provider);
   if (!apiKey) {
     return;
   }
@@ -181,7 +192,7 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
       const abortController = new AbortController();
       token.onCancellationRequested(() => abortController.abort());
 
-      const pending = renderPendingExplanation(document.lineCount, `Generating ${chunks.length} explanation chunks with ${config.model}...`);
+      const pending = renderPendingExplanation(document.lineCount, `Generating ${chunks.length} explanation chunks with ${activeModel}...`);
       const stored = store.put(requestKey, document.uri, pending, false);
       provider.refresh(stored.explanationUri);
       await openExplanation(editor, stored);
@@ -206,12 +217,13 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
       };
 
       try {
-        progress.report({ message: `Streaming one file-level explanation from ${config.model}...` });
-        const response = await new OpenAIClient().generateExplanationStream(
+        progress.report({ message: `Streaming one file-level explanation from ${activeModel}...` });
+        const client = config.provider === 'anthropic' ? new AnthropicClient() : new OpenAIClient();
+        const response = await client.generateExplanationStream(
           payload,
           {
             apiKey,
-            model: config.model,
+            model: activeModel,
             signal: abortController.signal
           },
           updateFromChunk
@@ -269,23 +281,52 @@ async function openExplanation(
   updateActiveLineFromEditor(sourceEditor);
 }
 
-async function chooseOpenAIModel(): Promise<void> {
+async function chooseProvider(): Promise<void> {
   const config = getCodeExplainerConfig();
-  const presetModels = uniqueNonEmpty([config.model, ...config.modelPresets]);
+  const selected = await vscode.window.showQuickPick(
+    [
+      {
+        label: 'openai',
+        description: config.provider === 'openai' ? 'current' : 'Use OpenAI Responses API'
+      },
+      {
+        label: 'anthropic',
+        description: config.provider === 'anthropic' ? 'current' : 'Use Claude Messages API'
+      }
+    ],
+    {
+      title: 'Code Explainer: AI Provider',
+      placeHolder: 'Choose which provider generates explanations'
+    }
+  );
+
+  if (!selected || !isProvider(selected.label)) {
+    return;
+  }
+
+  await setProvider(selected.label);
+  refreshSettingsDisplay();
+  vscode.window.showInformationMessage(`Code Explainer provider set to ${selected.label}.`);
+}
+
+async function chooseModel(): Promise<void> {
+  const config = getCodeExplainerConfig();
+  const activeModel = getActiveModel(config);
+  const presetModels = uniqueNonEmpty([activeModel, ...getActiveModelPresets(config)]);
   const customLabel = 'Custom model id...';
   const selected = await vscode.window.showQuickPick(
     [
       ...presetModels.map((model) => ({
         label: model,
-        description: model === config.model ? 'current' : model === 'gpt-5.4-mini' ? 'default' : undefined
+        description: model === activeModel ? 'current' : model === defaultModelForProvider(config.provider) ? 'default' : undefined
       })),
       {
         label: customLabel,
-        description: 'Enter another OpenAI model name'
+        description: `Enter another ${providerDisplayName(config.provider)} model name`
       }
     ],
     {
-      title: 'Code Explainer: OpenAI Model',
+      title: `Code Explainer: ${providerDisplayName(config.provider)} Model`,
       placeHolder: 'Choose the model used for new explanations'
     }
   );
@@ -297,9 +338,9 @@ async function chooseOpenAIModel(): Promise<void> {
   let nextModel = selected.label;
   if (nextModel === customLabel) {
     const custom = await vscode.window.showInputBox({
-      title: 'Code Explainer: Custom OpenAI Model',
-      prompt: 'Enter an OpenAI model id.',
-      value: config.model,
+      title: `Code Explainer: Custom ${providerDisplayName(config.provider)} Model`,
+      prompt: `Enter a ${providerDisplayName(config.provider)} model id.`,
+      value: activeModel,
       ignoreFocusOut: true,
       validateInput: (input) => (input.trim() ? undefined : 'Enter a non-empty model id.')
     });
@@ -309,7 +350,11 @@ async function chooseOpenAIModel(): Promise<void> {
     nextModel = custom.trim();
   }
 
-  await setOpenAIModel(nextModel);
+  if (config.provider === 'anthropic') {
+    await setAnthropicModel(nextModel);
+  } else {
+    await setOpenAIModel(nextModel);
+  }
   refreshSettingsDisplay();
   vscode.window.showInformationMessage(`Code Explainer model set to ${nextModel}.`);
 }
@@ -406,24 +451,25 @@ async function resetSyncOffset(): Promise<void> {
   vscode.window.showInformationMessage('Code Explainer sync offset reset to 0.');
 }
 
-async function ensureOpenAIKey(context: vscode.ExtensionContext): Promise<string | undefined> {
-  const apiKey = await resolveOpenAIKey(context);
+async function ensureApiKey(context: vscode.ExtensionContext, provider: LLMProvider): Promise<string | undefined> {
+  const apiKey = await resolveApiKey(context, provider);
   if (apiKey) {
     return apiKey;
   }
 
-  return promptForApiKey(context, {
-    title: 'Code Explainer: OpenAI API Key Required',
-    prompt: 'Enter your OpenAI API key to generate explanations. It will be stored in VS Code SecretStorage.'
+  return promptForApiKey(context, provider, {
+    title: `Code Explainer: ${providerDisplayName(provider)} API Key Required`,
+    prompt: `Enter your ${providerDisplayName(provider)} API key to generate explanations. It will be stored in VS Code SecretStorage.`
   });
 }
 
 async function promptForApiKey(
   context: vscode.ExtensionContext,
+  provider: LLMProvider,
   options: { title?: string; prompt?: string } = {}
 ): Promise<string | undefined> {
   const value = await vscode.window.showInputBox({
-    title: options.title ?? 'Code Explainer: OpenAI API Key',
+    title: options.title ?? `Code Explainer: ${providerDisplayName(provider)} API Key`,
     prompt: options.prompt ?? 'Stored in VS Code SecretStorage.',
     password: true,
     ignoreFocusOut: true,
@@ -435,14 +481,14 @@ async function promptForApiKey(
   }
 
   const trimmed = value.trim();
-  await storeOpenAIKey(context, trimmed);
-  vscode.window.showInformationMessage('OpenAI API key saved for Code Explainer.');
+  await storeApiKey(context, provider, trimmed);
+  vscode.window.showInformationMessage(`${providerDisplayName(provider)} API key saved for Code Explainer.`);
   return trimmed;
 }
 
-async function clearStoredApiKey(context: vscode.ExtensionContext): Promise<void> {
-  await clearOpenAIKey(context);
-  vscode.window.showInformationMessage('OpenAI API key cleared for Code Explainer.');
+async function clearStoredApiKey(context: vscode.ExtensionContext, provider: LLMProvider): Promise<void> {
+  await clearApiKey(context, provider);
+  vscode.window.showInformationMessage(`${providerDisplayName(provider)} API key cleared for Code Explainer.`);
 }
 
 function markStaleIfExplained(document: vscode.TextDocument): void {
@@ -476,13 +522,15 @@ async function handleSavedDocument(context: vscode.ExtensionContext, document: v
     return;
   }
 
+  const activeModel = getActiveModel(config);
   const contentHash = hashText(document.getText());
   const existingIsFresh = Boolean(
     existing &&
       existing.key.contentHash === contentHash &&
+      existing.key.provider === config.provider &&
       existing.key.level === config.explanationLevel &&
       existing.key.reviewEnabled === config.reviewEnabled &&
-      existing.key.model === config.model
+      existing.key.model === activeModel
   );
   const snapshotIsFresh = Boolean(snapshot && snapshotMatches(snapshot, contentHash, config, document.lineCount));
   if (existingIsFresh || snapshotIsFresh) {
@@ -528,6 +576,18 @@ function isExcluded(uri: vscode.Uri, globs: string[]): boolean {
 
 function isExplanationLevel(value: string): value is ExplanationLevel {
   return value === 'concise' || value === 'medium' || value === 'detailed' || value === 'story';
+}
+
+function isProvider(value: string): value is LLMProvider {
+  return value === 'openai' || value === 'anthropic';
+}
+
+function providerDisplayName(provider: LLMProvider): string {
+  return provider === 'anthropic' ? 'Anthropic' : 'OpenAI';
+}
+
+function defaultModelForProvider(provider: LLMProvider): string {
+  return provider === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-5.4-mini';
 }
 
 function formatOffset(offset: number): string {
@@ -648,7 +708,7 @@ async function handleExplanationPanelCommand(message: ExplanationWebviewCommand)
       await vscode.commands.executeCommand('codeExplainer.refreshExplanation');
       break;
     case 'setModel':
-      await chooseOpenAIModel();
+      await chooseModel();
       break;
     case 'setLevel':
       if (isExplanationLevel(message.level)) {
@@ -743,8 +803,9 @@ async function explainUriSet(context: vscode.ExtensionContext, uris: vscode.Uri[
     return;
   }
 
+  const config = getCodeExplainerConfig();
   const answer = await vscode.window.showWarningMessage(
-    `Explain ${uris.length} file${uris.length === 1 ? '' : 's'}? Fresh snapshots will be reused, but stale or missing snapshots may call the OpenAI API.`,
+    `Explain ${uris.length} file${uris.length === 1 ? '' : 's'}? Fresh snapshots will be reused, but stale or missing snapshots may call the ${providerDisplayName(config.provider)} API.`,
     { modal: true },
     'Continue'
   );

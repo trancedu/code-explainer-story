@@ -16,7 +16,13 @@ test('snapshotRelativePathForSource includes review mode in the filename', () =>
   );
 });
 
+test('snapshotRelativePathForSource separates Anthropic snapshots from OpenAI snapshots', () => {
+  assert.equal(
+    snapshotRelativePathForSource('src/app.ts', 'story', false, 'anthropic'),
+    '.code-explainer/explanations/src/app.ts.anthropic.story.json'
+  );
+});
+
 test('normalizeRelativePath strips leading slashes', () => {
   assert.equal(normalizeRelativePath('/backend/main.py'), 'backend/main.py');
 });
-

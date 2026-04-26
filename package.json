@@ -14,6 +14,7 @@
   "activationEvents": [
     "onCommand:codeExplainer.explainCurrentFile",
     "onCommand:codeExplainer.refreshExplanation",
+    "onCommand:codeExplainer.setProvider",
     "onCommand:codeExplainer.setModel",
     "onCommand:codeExplainer.setExplanationLevel",
     "onCommand:codeExplainer.toggleInlineExplanations",
@@ -26,7 +27,9 @@
     "onCommand:codeExplainer.decreaseSyncOffset",
     "onCommand:codeExplainer.resetSyncOffset",
     "onCommand:codeExplainer.setOpenAIKey",
-    "onCommand:codeExplainer.clearOpenAIKey"
+    "onCommand:codeExplainer.clearOpenAIKey",
+    "onCommand:codeExplainer.setAnthropicKey",
+    "onCommand:codeExplainer.clearAnthropicKey"
   ],
   "main": "./out/src/extension.js",
   "scripts": {
@@ -53,8 +56,13 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "codeExplainer.setProvider",
+        "title": "Code Explainer: Set AI Provider",
+        "icon": "$(cloud)"
+      },
+      {
         "command": "codeExplainer.setModel",
-        "title": "Code Explainer: Set OpenAI Model",
+        "title": "Code Explainer: Set Model",
         "icon": "$(symbol-variable)"
       },
       {
@@ -112,11 +120,28 @@
       {
         "command": "codeExplainer.clearOpenAIKey",
         "title": "Code Explainer: Clear OpenAI API Key"
+      },
+      {
+        "command": "codeExplainer.setAnthropicKey",
+        "title": "Code Explainer: Set Anthropic API Key"
+      },
+      {
+        "command": "codeExplainer.clearAnthropicKey",
+        "title": "Code Explainer: Clear Anthropic API Key"
       }
     ],
     "configuration": {
       "title": "Code Explainer",
       "properties": {
+        "codeExplainer.provider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "default": "openai",
+          "description": "AI provider used for new code explanations."
+        },
         "codeExplainer.model": {
           "type": "string",
           "default": "gpt-5.4-mini",
@@ -133,7 +158,22 @@
           "items": {
             "type": "string"
           },
-          "description": "Model names shown by Code Explainer: Set OpenAI Model. You can still enter a custom model id."
+          "description": "OpenAI model names shown by Code Explainer: Set Model when OpenAI is selected. You can still enter a custom model id."
+        },
+        "codeExplainer.anthropic.model": {
+          "type": "string",
+          "default": "claude-sonnet-4-6",
+          "description": "Anthropic Claude model used for code explanations when Anthropic is selected."
+        },
+        "codeExplainer.anthropic.modelPresets": {
+          "type": "array",
+          "default": [
+            "claude-sonnet-4-6"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Anthropic model names shown by Code Explainer: Set Model when Anthropic is selected. You can still enter a custom model id."
         },
         "codeExplainer.explanationLevel": {
           "type": "string",
@@ -259,34 +299,39 @@
           "group": "navigation@1"
         },
         {
-          "command": "codeExplainer.setModel",
+          "command": "codeExplainer.setProvider",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@2"
         },
         {
-          "command": "codeExplainer.setExplanationLevel",
+          "command": "codeExplainer.setModel",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@3"
         },
         {
-          "command": "codeExplainer.toggleInlineExplanations",
+          "command": "codeExplainer.setExplanationLevel",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@4"
         },
         {
-          "command": "codeExplainer.toggleReviewMode",
+          "command": "codeExplainer.toggleInlineExplanations",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@5"
         },
         {
-          "command": "codeExplainer.clearCache",
+          "command": "codeExplainer.toggleReviewMode",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@6"
         },
         {
-          "command": "codeExplainer.saveCurrentExplanation",
+          "command": "codeExplainer.clearCache",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@7"
+        },
+        {
+          "command": "codeExplainer.saveCurrentExplanation",
+          "when": "resourceScheme == code-explainer",
+          "group": "navigation@8"
         },
         {
           "command": "codeExplainer.decreaseSyncOffset",

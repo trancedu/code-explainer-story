@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CodeExplainerConfig } from '../config';
+import { CodeExplainerConfig, getActiveModel } from '../config';
 import { resolveExplanationAnchorLine } from '../analysis/explanationAnchors';
 import { ExplanationStore, StoredExplanation, hashText } from '../state/ExplanationStore';
 import { buildInlineHints, InlineHint } from './inlineHints';
@@ -101,7 +101,8 @@ export class InlineExplanationController implements vscode.HoverProvider, vscode
     if (
       !stored ||
       stored.key.contentHash !== hashText(document.getText()) ||
-      stored.key.model !== config.model ||
+      stored.key.provider !== config.provider ||
+      stored.key.model !== getActiveModel(config) ||
       stored.key.level !== config.explanationLevel ||
       stored.key.reviewEnabled !== config.reviewEnabled
     ) {

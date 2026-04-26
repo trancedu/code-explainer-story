@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CodeExplainerConfig } from '../config';
+import { CodeExplainerConfig, getActiveModel } from '../config';
 import { StoredExplanation } from '../state/ExplanationStore';
 import { lineToScrollTop } from '../sync/scrollMath';
 
@@ -30,6 +30,7 @@ export type EditorMetrics = {
 
 type WebviewState = {
   fileName: string;
+  provider: string;
   model: string;
   level: string;
   inlineEnabled: boolean;
@@ -176,7 +177,8 @@ function toWebviewState(
 ): WebviewState {
   return {
     fileName: path.basename(stored.sourceUri.fsPath),
-    model: config.model,
+    provider: config.provider,
+    model: getActiveModel(config),
     level: config.explanationLevel,
     inlineEnabled: config.inlineEnabled,
     reviewEnabled: config.reviewEnabled,
@@ -438,8 +440,8 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       document.documentElement.style.setProperty('--font-family', state.fontFamily);
 
       level.value = state.level;
-      model.textContent = 'Model ' + state.model;
-      model.title = 'Change OpenAI model: ' + state.model;
+      model.textContent = state.provider + ' ' + state.model;
+      model.title = 'Change ' + state.provider + ' model: ' + state.model;
       inline.textContent = state.inlineEnabled ? 'Inline on' : 'Inline off';
       review.textContent = state.reviewEnabled ? 'Review on' : 'Review off';
       offset.textContent = formatOffset(state.syncOffset);
