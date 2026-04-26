@@ -130,7 +130,7 @@
         "codeExplainer.model": {
           "type": "string",
           "default": "gpt-5.4-mini",
-          "description": "Model used for code explanations. Model ids starting with claude use Anthropic; other ids use OpenAI."
+          "description": "Model used for code explanations. Model ids starting with claude use Anthropic; other ids use OpenAI. To add another provider, update the routing and client code described in the README."
         },
         "codeExplainer.modelPresets": {
           "type": "array",

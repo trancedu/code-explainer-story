@@ -58,6 +58,18 @@ Use `Code Explainer: Set OpenAI API Key` or `Code Explainer: Set Anthropic API K
 
 The `.env` file is ignored by git.
 
+## Custom Model Providers
+
+Out of the box, model routing is deliberately small: model ids starting with `claude` use Anthropic, and everything else uses OpenAI. To connect another provider or a self-hosted model, update the routing and client code rather than only changing the model name:
+
+1. Add the provider name to `LLMProvider` in `src/types.ts`.
+2. Update `providerForModel()` and `providerDisplayName()` in `src/llm/modelRouting.ts` so your model ids route to that provider.
+3. Add a client modeled after `src/openai/OpenAIClient.ts` or `src/anthropic/AnthropicClient.ts`. It should expose both `generateExplanationStream()` for file explanations and `askQuestionStream()` for follow-up answers.
+4. Branch to that client in `src/extension.ts` wherever the current code chooses between `AnthropicClient` and `OpenAIClient`.
+5. If your provider needs a different key, add SecretStorage commands and `.env` lookup support in `src/devEnv.ts`, then add matching command contributions in `package.json`.
+
+For OpenAI-compatible local gateways, the smallest change is usually to adapt `src/openai/OpenAIClient.ts` to your endpoint URL, headers, and response format while keeping the same public methods.
+
 ## Release Builds
 
 Build VSIX packages into `release/`:
