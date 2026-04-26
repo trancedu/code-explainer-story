@@ -1,12 +1,11 @@
 import * as vscode from 'vscode';
 import { ExplanationLevel, LLMProvider } from './types';
+import { defaultModel, defaultModelPresets, providerForModel } from './llm/modelRouting';
 
 export type CodeExplainerConfig = {
   provider: LLMProvider;
   model: string;
   modelPresets: string[];
-  anthropicModel: string;
-  anthropicModelPresets: string[];
   explanationLevel: ExplanationLevel;
   reviewEnabled: boolean;
   inlineEnabled: boolean;
@@ -26,19 +25,16 @@ export type CodeExplainerConfig = {
 };
 
 const levels = new Set<ExplanationLevel>(['concise', 'medium', 'detailed', 'story']);
-const providers = new Set<LLMProvider>(['openai', 'anthropic']);
 
 export function getCodeExplainerConfig(): CodeExplainerConfig {
   const config = vscode.workspace.getConfiguration('codeExplainer');
   const level = config.get<string>('explanationLevel', 'medium');
-  const provider = config.get<string>('provider', 'openai');
+  const model = config.get<string>('model', defaultModel).trim() || defaultModel;
 
   return {
-    provider: providers.has(provider as LLMProvider) ? (provider as LLMProvider) : 'openai',
-    model: config.get<string>('model', 'gpt-5.4-mini'),
-    modelPresets: config.get<string[]>('modelPresets', ['gpt-5.4-mini', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2']),
-    anthropicModel: config.get<string>('anthropic.model', 'claude-sonnet-4-6'),
-    anthropicModelPresets: config.get<string[]>('anthropic.modelPresets', ['claude-sonnet-4-6']),
+    provider: providerForModel(model),
+    model,
+    modelPresets: config.get<string[]>('modelPresets', defaultModelPresets),
     explanationLevel: levels.has(level as ExplanationLevel) ? (level as ExplanationLevel) : 'medium',
     reviewEnabled: config.get<boolean>('reviewEnabled', false),
     inlineEnabled: config.get<boolean>('inline.enabled', false),
@@ -59,17 +55,11 @@ export function getCodeExplainerConfig(): CodeExplainerConfig {
 }
 
 export function getActiveModel(config: CodeExplainerConfig): string {
-  return config.provider === 'anthropic' ? config.anthropicModel : config.model;
+  return config.model;
 }
 
 export function getActiveModelPresets(config: CodeExplainerConfig): string[] {
-  return config.provider === 'anthropic' ? config.anthropicModelPresets : config.modelPresets;
-}
-
-export async function setProvider(provider: LLMProvider): Promise<void> {
-  await vscode.workspace
-    .getConfiguration('codeExplainer')
-    .update('provider', provider, vscode.ConfigurationTarget.Global);
+  return config.modelPresets;
 }
 
 export async function setInlineEnabled(enabled: boolean): Promise<void> {
@@ -78,16 +68,10 @@ export async function setInlineEnabled(enabled: boolean): Promise<void> {
     .update('inline.enabled', enabled, vscode.ConfigurationTarget.Global);
 }
 
-export async function setOpenAIModel(model: string): Promise<void> {
+export async function setModel(model: string): Promise<void> {
   await vscode.workspace
     .getConfiguration('codeExplainer')
     .update('model', model, vscode.ConfigurationTarget.Global);
-}
-
-export async function setAnthropicModel(model: string): Promise<void> {
-  await vscode.workspace
-    .getConfiguration('codeExplainer')
-    .update('anthropic.model', model, vscode.ConfigurationTarget.Global);
 }
 
 export async function setExplanationLevel(level: ExplanationLevel): Promise<void> {

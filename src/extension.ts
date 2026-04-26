@@ -9,15 +9,14 @@ import {
   getActiveModelPresets,
   getCodeExplainerConfig,
   setExplanationLevel,
-  setAnthropicModel,
   setInlineEnabled,
-  setOpenAIModel,
-  setProvider,
+  setModel,
   setReviewEnabled,
   setSyncLineOffset
 } from './config';
 import { AnthropicClient } from './anthropic/AnthropicClient';
 import { clearApiKey, resolveApiKey, storeApiKey } from './devEnv';
+import { providerDisplayName, providerForModel } from './llm/modelRouting';
 import { InlineExplanationController } from './inline/InlineExplanationController';
 import { OpenAIClient } from './openai/OpenAIClient';
 import {
@@ -68,7 +67,6 @@ export function activate(context: vscode.ExtensionContext): void {
     inlineController,
     vscode.commands.registerCommand('codeExplainer.explainCurrentFile', () => explainCurrentFile(context)),
     vscode.commands.registerCommand('codeExplainer.refreshExplanation', () => explainCurrentFile(context, true)),
-    vscode.commands.registerCommand('codeExplainer.setProvider', chooseProvider),
     vscode.commands.registerCommand('codeExplainer.setModel', chooseModel),
     vscode.commands.registerCommand('codeExplainer.setExplanationLevel', chooseExplanationLevel),
     vscode.commands.registerCommand('codeExplainer.toggleInlineExplanations', toggleInlineExplanations),
@@ -281,34 +279,6 @@ async function openExplanation(
   updateActiveLineFromEditor(sourceEditor);
 }
 
-async function chooseProvider(): Promise<void> {
-  const config = getCodeExplainerConfig();
-  const selected = await vscode.window.showQuickPick(
-    [
-      {
-        label: 'openai',
-        description: config.provider === 'openai' ? 'current' : 'Use OpenAI Responses API'
-      },
-      {
-        label: 'anthropic',
-        description: config.provider === 'anthropic' ? 'current' : 'Use Claude Messages API'
-      }
-    ],
-    {
-      title: 'Code Explainer: AI Provider',
-      placeHolder: 'Choose which provider generates explanations'
-    }
-  );
-
-  if (!selected || !isProvider(selected.label)) {
-    return;
-  }
-
-  await setProvider(selected.label);
-  refreshSettingsDisplay();
-  vscode.window.showInformationMessage(`Code Explainer provider set to ${selected.label}.`);
-}
-
 async function chooseModel(): Promise<void> {
   const config = getCodeExplainerConfig();
   const activeModel = getActiveModel(config);
@@ -318,16 +288,16 @@ async function chooseModel(): Promise<void> {
     [
       ...presetModels.map((model) => ({
         label: model,
-        description: model === activeModel ? 'current' : model === defaultModelForProvider(config.provider) ? 'default' : undefined
+        description: model === activeModel ? `current, ${providerDisplayName(providerForModel(model))}` : providerDisplayName(providerForModel(model))
       })),
       {
         label: customLabel,
-        description: `Enter another ${providerDisplayName(config.provider)} model name`
+        description: 'Enter another model id'
       }
     ],
     {
-      title: `Code Explainer: ${providerDisplayName(config.provider)} Model`,
-      placeHolder: 'Choose the model used for new explanations'
+      title: 'Code Explainer: Model',
+      placeHolder: 'Choose a model. Claude models use Anthropic; GPT models use OpenAI.'
     }
   );
 
@@ -338,8 +308,8 @@ async function chooseModel(): Promise<void> {
   let nextModel = selected.label;
   if (nextModel === customLabel) {
     const custom = await vscode.window.showInputBox({
-      title: `Code Explainer: Custom ${providerDisplayName(config.provider)} Model`,
-      prompt: `Enter a ${providerDisplayName(config.provider)} model id.`,
+      title: 'Code Explainer: Custom Model',
+      prompt: 'Enter a model id. Model ids starting with claude use Anthropic; other ids use OpenAI.',
       value: activeModel,
       ignoreFocusOut: true,
       validateInput: (input) => (input.trim() ? undefined : 'Enter a non-empty model id.')
@@ -350,13 +320,9 @@ async function chooseModel(): Promise<void> {
     nextModel = custom.trim();
   }
 
-  if (config.provider === 'anthropic') {
-    await setAnthropicModel(nextModel);
-  } else {
-    await setOpenAIModel(nextModel);
-  }
+  await setModel(nextModel);
   refreshSettingsDisplay();
-  vscode.window.showInformationMessage(`Code Explainer model set to ${nextModel}.`);
+  vscode.window.showInformationMessage(`Code Explainer model set to ${nextModel} (${providerDisplayName(providerForModel(nextModel))}).`);
 }
 
 async function toggleInlineExplanations(): Promise<void> {
@@ -576,18 +542,6 @@ function isExcluded(uri: vscode.Uri, globs: string[]): boolean {
 
 function isExplanationLevel(value: string): value is ExplanationLevel {
   return value === 'concise' || value === 'medium' || value === 'detailed' || value === 'story';
-}
-
-function isProvider(value: string): value is LLMProvider {
-  return value === 'openai' || value === 'anthropic';
-}
-
-function providerDisplayName(provider: LLMProvider): string {
-  return provider === 'anthropic' ? 'Anthropic' : 'OpenAI';
-}
-
-function defaultModelForProvider(provider: LLMProvider): string {
-  return provider === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-5.4-mini';
 }
 
 function formatOffset(offset: number): string {

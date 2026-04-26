@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { CodeExplainerConfig } from '../config';
+import { providerForModel } from '../llm/modelRouting';
 import { StoredExplanation } from '../state/ExplanationStore';
 import { ExplanationLevel, LLMProvider, RenderedExplanation, ReviewItem } from '../types';
 import { normalizeRelativePath, snapshotRelativePathForSource } from './snapshotPaths';
@@ -91,17 +92,16 @@ export function createSnapshot(
 export function snapshotMatches(
   snapshot: ExplanationSnapshot,
   contentHash: string,
-  config: Pick<CodeExplainerConfig, 'provider' | 'model' | 'anthropicModel' | 'explanationLevel' | 'reviewEnabled'>,
+  config: Pick<CodeExplainerConfig, 'provider' | 'model' | 'explanationLevel' | 'reviewEnabled'>,
   lineCount: number
 ): boolean {
-  const snapshotProvider = snapshot.generation.provider ?? 'openai';
-  const activeModel = config.provider === 'anthropic' ? config.anthropicModel : config.model;
+  const snapshotProvider = snapshot.generation.provider ?? providerForModel(snapshot.generation.model);
   return (
     snapshot.schemaVersion === snapshotSchemaVersion &&
     snapshot.source.hash === contentHash &&
     snapshot.source.lineCount === lineCount &&
     snapshotProvider === config.provider &&
-    snapshot.generation.model === activeModel &&
+    snapshot.generation.model === config.model &&
     snapshot.generation.level === config.explanationLevel &&
     snapshot.generation.reviewEnabled === config.reviewEnabled &&
     snapshot.explanation.lines.length === lineCount

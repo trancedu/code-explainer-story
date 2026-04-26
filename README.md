@@ -6,7 +6,6 @@ Code Explainer opens a source file beside a generated English explanation. The s
 
 - `Code Explainer: Explain Current File`
 - `Code Explainer: Refresh Explanation`
-- `Code Explainer: Set AI Provider`
 - `Code Explainer: Set Model`
 - `Code Explainer: Set Explanation Level`
 - `Code Explainer: Toggle Inline Explanations`
@@ -23,7 +22,7 @@ Code Explainer opens a source file beside a generated English explanation. The s
 - `Code Explainer: Set Anthropic API Key`
 - `Code Explainer: Clear Anthropic API Key`
 
-When an explanation panel is open, its top header always shows the current provider/model, inline mode, explanation level, review mode, sync offset, refresh action, and cache action. The status bar also shows the current level and model.
+When an explanation panel is open, its top header always shows the current model, inline mode, explanation level, review mode, sync offset, refresh action, and cache action. The status bar also shows the current level and model.
 
 Inline explanations are optional. Turn them on with `Code Explainer: Toggle Inline Explanations` or the `Inline` button in the explanation header. Inline mode shows hover text on nearby code and short end-of-line hints when the source line is not too wide. The right-side panel remains the complete collected view.
 
@@ -45,11 +44,11 @@ When a saved source file has an existing in-memory explanation or snapshot, Code
 
 ## API Key
 
-Use `Code Explainer: Set AI Provider` to choose OpenAI or Anthropic. OpenAI remains the default provider.
+Use `Code Explainer: Set Model` to choose the generation model. Model ids starting with `claude` use Anthropic; `gpt` and other model ids use OpenAI.
 
-Use `Code Explainer: Set OpenAI API Key` or `Code Explainer: Set Anthropic API Key` to store your key in VS Code SecretStorage. If no key is configured, the first command that needs generation asks for the selected provider key and then continues. For local extension development only, the extension also reads `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `CLAUDE_API_KEY` from `.env` in the extension folder.
+Use `Code Explainer: Set OpenAI API Key` or `Code Explainer: Set Anthropic API Key` to store your key in VS Code SecretStorage. If no key is configured, the first command that needs generation asks for the key required by the chosen model and then continues. For local extension development only, the extension also reads `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `CLAUDE_API_KEY` from `.env` in the extension folder.
 
-`codeExplainer.model` defaults to `gpt-5.4-mini` for OpenAI. `codeExplainer.anthropic.model` defaults to `claude-sonnet-4-6` for Anthropic. Use `Code Explainer: Set Model` to pick from the selected provider's presets or enter a custom model id.
+`codeExplainer.model` defaults to `gpt-5.4-mini`, and `codeExplainer.modelPresets` includes `claude-sonnet-4-6`. Use `Code Explainer: Set Model` to pick a preset or enter a custom model id.
 
 The `.env` file is ignored by git.
 

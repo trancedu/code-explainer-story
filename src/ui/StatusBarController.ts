@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { CodeExplainerConfig, getActiveModel } from '../config';
+import { providerDisplayName } from '../llm/modelRouting';
 
 export class StatusBarController implements vscode.Disposable {
   private readonly item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
@@ -17,13 +18,13 @@ export class StatusBarController implements vscode.Disposable {
     this.item.text = `$(book) Explain ${config.explanationLevel} • ${activeModel}`;
     this.item.tooltip = [
       'Code Explainer settings',
-      `Provider: ${config.provider}`,
       `Model: ${activeModel}`,
+      `API: ${providerDisplayName(config.provider)} (inferred from model)`,
       `Level: ${config.explanationLevel}`,
       `Inline: ${config.inlineEnabled ? 'on' : 'off'}`,
       `Review: ${config.reviewEnabled ? 'on' : 'off'}`,
       `Sync offset: ${offset}`,
-      'Click to change explanation level. Use Code Explainer: Set AI Provider and Set Model to change generation.'
+      'Click to change explanation level. Use Code Explainer: Set Model to change generation.'
     ].join('\n');
   }
 

@@ -30,7 +30,6 @@ export type EditorMetrics = {
 
 type WebviewState = {
   fileName: string;
-  provider: string;
   model: string;
   level: string;
   inlineEnabled: boolean;
@@ -177,7 +176,6 @@ function toWebviewState(
 ): WebviewState {
   return {
     fileName: path.basename(stored.sourceUri.fsPath),
-    provider: config.provider,
     model: getActiveModel(config),
     level: config.explanationLevel,
     inlineEnabled: config.inlineEnabled,
@@ -338,7 +336,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 </head>
 <body>
   <div class="toolbar">
-    <button id="model" class="secondary model" title="Change OpenAI model"></button>
+    <button id="model" class="secondary model" title="Change model"></button>
     <button id="inline" class="secondary"></button>
     <label>Level <select id="level">
       <option value="concise">concise</option>
@@ -440,8 +438,8 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       document.documentElement.style.setProperty('--font-family', state.fontFamily);
 
       level.value = state.level;
-      model.textContent = state.provider + ' ' + state.model;
-      model.title = 'Change ' + state.provider + ' model: ' + state.model;
+      model.textContent = 'Model ' + state.model;
+      model.title = 'Change model: ' + state.model;
       inline.textContent = state.inlineEnabled ? 'Inline on' : 'Inline off';
       review.textContent = state.reviewEnabled ? 'Review on' : 'Review off';
       offset.textContent = formatOffset(state.syncOffset);

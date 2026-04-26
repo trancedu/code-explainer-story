@@ -14,7 +14,6 @@
   "activationEvents": [
     "onCommand:codeExplainer.explainCurrentFile",
     "onCommand:codeExplainer.refreshExplanation",
-    "onCommand:codeExplainer.setProvider",
     "onCommand:codeExplainer.setModel",
     "onCommand:codeExplainer.setExplanationLevel",
     "onCommand:codeExplainer.toggleInlineExplanations",
@@ -54,11 +53,6 @@
         "command": "codeExplainer.refreshExplanation",
         "title": "Code Explainer: Refresh Explanation",
         "icon": "$(refresh)"
-      },
-      {
-        "command": "codeExplainer.setProvider",
-        "title": "Code Explainer: Set AI Provider",
-        "icon": "$(cloud)"
       },
       {
         "command": "codeExplainer.setModel",
@@ -133,19 +127,10 @@
     "configuration": {
       "title": "Code Explainer",
       "properties": {
-        "codeExplainer.provider": {
-          "type": "string",
-          "enum": [
-            "openai",
-            "anthropic"
-          ],
-          "default": "openai",
-          "description": "AI provider used for new code explanations."
-        },
         "codeExplainer.model": {
           "type": "string",
           "default": "gpt-5.4-mini",
-          "description": "OpenAI model used for code explanations."
+          "description": "Model used for code explanations. Model ids starting with claude use Anthropic; other ids use OpenAI."
         },
         "codeExplainer.modelPresets": {
           "type": "array",
@@ -153,27 +138,13 @@
             "gpt-5.4-mini",
             "gpt-5.4",
             "gpt-5.3-codex",
-            "gpt-5.2"
-          ],
-          "items": {
-            "type": "string"
-          },
-          "description": "OpenAI model names shown by Code Explainer: Set Model when OpenAI is selected. You can still enter a custom model id."
-        },
-        "codeExplainer.anthropic.model": {
-          "type": "string",
-          "default": "claude-sonnet-4-6",
-          "description": "Anthropic Claude model used for code explanations when Anthropic is selected."
-        },
-        "codeExplainer.anthropic.modelPresets": {
-          "type": "array",
-          "default": [
+            "gpt-5.2",
             "claude-sonnet-4-6"
           ],
           "items": {
             "type": "string"
           },
-          "description": "Anthropic model names shown by Code Explainer: Set Model when Anthropic is selected. You can still enter a custom model id."
+          "description": "Model names shown by Code Explainer: Set Model. You can still enter a custom model id."
         },
         "codeExplainer.explanationLevel": {
           "type": "string",
@@ -299,39 +270,34 @@
           "group": "navigation@1"
         },
         {
-          "command": "codeExplainer.setProvider",
+          "command": "codeExplainer.setModel",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@2"
         },
         {
-          "command": "codeExplainer.setModel",
+          "command": "codeExplainer.setExplanationLevel",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@3"
         },
         {
-          "command": "codeExplainer.setExplanationLevel",
+          "command": "codeExplainer.toggleInlineExplanations",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@4"
         },
         {
-          "command": "codeExplainer.toggleInlineExplanations",
+          "command": "codeExplainer.toggleReviewMode",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@5"
         },
         {
-          "command": "codeExplainer.toggleReviewMode",
+          "command": "codeExplainer.clearCache",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@6"
         },
         {
-          "command": "codeExplainer.clearCache",
-          "when": "resourceScheme == code-explainer",
-          "group": "navigation@7"
-        },
-        {
           "command": "codeExplainer.saveCurrentExplanation",
           "when": "resourceScheme == code-explainer",
-          "group": "navigation@8"
+          "group": "navigation@7"
         },
         {
           "command": "codeExplainer.decreaseSyncOffset",
