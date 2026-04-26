@@ -583,6 +583,7 @@ function handleSourceVisibleRangesChanged(event: vscode.TextEditorVisibleRangesC
   if (
     !activeExplanationPanel ||
     !activeExplanationPanel.matchesSource(event.textEditor.document.uri) ||
+    config.explanationLevel === 'walkthrough' ||
     Date.now() < ignoreSourceScrollUntil
   ) {
     return;
@@ -595,13 +596,6 @@ function handleSourceVisibleRangesChanged(event: vscode.TextEditorVisibleRangesC
 
   if (sourceScrollDebounce) {
     clearTimeout(sourceScrollDebounce);
-  }
-
-  if (config.explanationLevel === 'walkthrough') {
-    sourceScrollDebounce = setTimeout(() => {
-      activeExplanationPanel?.setActiveLine(topLine + 1);
-    }, 50);
-    return;
   }
 
   sourceScrollDebounce = setTimeout(() => {
@@ -662,11 +656,16 @@ function handleWebviewActiveLineChanged(line: number): void {
     return;
   }
 
+  const config = getCodeExplainerConfig();
   activeSourceLine = line;
   activeSourceEditor = sourceEditor;
   const targetLine = Math.max(0, Math.min(sourceEditor.document.lineCount - 1, line - 1));
   ignoreSourceScrollUntil = Date.now() + 250;
-  sourceEditor.revealRange(new vscode.Range(targetLine, 0, targetLine, 0), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+  const revealType =
+    config.explanationLevel === 'walkthrough'
+      ? vscode.TextEditorRevealType.AtTop
+      : vscode.TextEditorRevealType.InCenterIfOutsideViewport;
+  sourceEditor.revealRange(new vscode.Range(targetLine, 0, targetLine, 0), revealType);
 }
 
 async function handleExplanationPanelCommand(message: ExplanationWebviewCommand): Promise<void> {

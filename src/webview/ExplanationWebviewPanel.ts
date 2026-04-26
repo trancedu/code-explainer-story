@@ -320,6 +320,10 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       box-shadow: inset 3px 0 0 var(--vscode-focusBorder);
     }
 
+    .content.walkthrough .line {
+      cursor: pointer;
+    }
+
     button:disabled {
       opacity: 0.55;
       cursor: default;
