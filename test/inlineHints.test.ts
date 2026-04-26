@@ -36,6 +36,26 @@ test('buildInlineHints hides end-of-line text for wide source rows', () => {
   assert.equal(hints[0].showAfterCode, false);
 });
 
+test('buildInlineHints skips blank source rows used for wrapped explanation overflow', () => {
+  const hints = buildInlineHints(
+    ['Starts a long explanation.', 'overflow continuation fragment.', 'Next real line.'],
+    ['value = compute()', '   ', 'return value'],
+    {
+      maxHints: 10,
+      maxTextLength: 80,
+      maxCodeColumns: 100
+    }
+  );
+
+  assert.deepEqual(
+    hints.map((hint) => ({ line: hint.line, text: hint.text })),
+    [
+      { line: 1, text: 'Starts a long explanation.' },
+      { line: 3, text: 'Next real line.' }
+    ]
+  );
+});
+
 test('buildInlineHints limits and truncates inline text', () => {
   const hints = buildInlineHints(
     ['A '.repeat(20), 'Second hint.'],

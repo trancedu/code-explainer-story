@@ -19,12 +19,16 @@ export function buildInlineHints(
   const maxHints = options.maxHints > 0 ? options.maxHints : Number.POSITIVE_INFINITY;
 
   for (let index = 0; index < explanationLines.length && hints.length < maxHints; index += 1) {
+    const sourceLine = sourceLines[index] ?? '';
+    if (!sourceLine.trim()) {
+      continue;
+    }
+
     const text = truncateInlineText(explanationLines[index]?.trim() ?? '', options.maxTextLength);
     if (!text) {
       continue;
     }
 
-    const sourceLine = sourceLines[index] ?? '';
     hints.push({
       line: index + 1,
       text,
