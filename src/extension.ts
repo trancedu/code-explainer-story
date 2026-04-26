@@ -657,10 +657,6 @@ function handleWebviewVisibleLineChanged(line: number): void {
 }
 
 function handleWebviewActiveLineChanged(line: number): void {
-  if (getCodeExplainerConfig().explanationLevel === 'walkthrough') {
-    return;
-  }
-
   const sourceEditor = findVisibleSourceEditor();
   if (!sourceEditor) {
     return;

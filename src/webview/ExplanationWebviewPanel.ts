@@ -523,6 +523,14 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
         row.append(gutter, text);
         row.addEventListener('click', () => {
           if (state.walkthrough) {
+            const chunk = state.walkthroughChunks?.find((c) =>
+              index >= c.paragraphStart && index <= c.paragraphEnd
+            );
+            if (!chunk) {
+              return;
+            }
+            setWalkthroughActiveChunk(chunk.startLine, false);
+            vscode.postMessage({ type: 'activeLineChanged', line: chunk.startLine });
             return;
           }
 
@@ -566,16 +574,44 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
         return;
       }
       let firstNode = null;
+      let lastNode = null;
       for (let i = chunk.paragraphStart; i <= chunk.paragraphEnd; i++) {
         const row = document.querySelector('.line[data-line="' + (i + 1) + '"]');
         if (row) {
           row.classList.add('chunk-active');
           if (!firstNode) { firstNode = row; }
+          lastNode = row;
         }
       }
       if (shouldScroll && firstNode) {
-        firstNode.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        scrollChunkIntoView(firstNode, lastNode || firstNode);
       }
+    }
+
+    function scrollChunkIntoView(firstNode, lastNode) {
+      const containerRect = content.getBoundingClientRect();
+      const firstRect = firstNode.getBoundingClientRect();
+      const lastRect = lastNode.getBoundingClientRect();
+      const viewportHeight = containerRect.height;
+
+      const firstTopOffset = firstRect.top - containerRect.top;
+      const lastBottomOffset = lastRect.bottom - containerRect.top;
+
+      const headroom = Math.min(Math.max(viewportHeight * 0.18, 24), 120);
+      const chunkHeight = lastBottomOffset - firstTopOffset;
+      const chunkFits = chunkHeight <= viewportHeight - headroom;
+
+      const startInComfortZone = firstTopOffset >= headroom * 0.5 && firstTopOffset <= viewportHeight * 0.45;
+      const tailVisibleEnough = chunkFits ? lastBottomOffset <= viewportHeight - 8 : true;
+
+      if (startInComfortZone && tailVisibleEnough) {
+        return;
+      }
+
+      content.scrollBy({
+        top: firstTopOffset - headroom,
+        behavior: 'smooth'
+      });
     }
 
     function scrollTopToLine(scrollTop, lineHeight, lineCount) {
