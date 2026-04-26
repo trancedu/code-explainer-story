@@ -22,6 +22,7 @@ export function renderExplanation(
   const level = options.level ?? 'detailed';
   const summaryOnlyMode = level === 'concise';
   const mediumMode = level === 'medium';
+  const storyMode = level === 'story';
 
   for (const chunk of response.chunks) {
     const start = clamp(chunk.startLine, 1, lineCount);
@@ -30,36 +31,40 @@ export function renderExplanation(
       ? firstMeaningfulLineInRange(sourceLines, languageId, start, end)
       : start;
 
-    if (chunk.summary.trim() && anchor !== undefined && !hasAnyLineText(lines, start, end)) {
-      lines[anchor - 1] = sanitizeLine(chunk.summary);
-    }
+    if (storyMode) {
+      renderStoryChunk(lines, chunk, sourceLines, languageId, lineCount, anchor);
+    } else {
+      if (chunk.summary.trim() && anchor !== undefined && !hasAnyLineText(lines, start, end)) {
+        lines[anchor - 1] = sanitizeLine(chunk.summary);
+      }
 
-    const mediumLineNoteLimit = mediumMode ? getMediumLineNoteLimit(start, end) : Number.POSITIVE_INFINITY;
-    let mediumLineNotesRendered = 0;
+      const mediumLineNoteLimit = mediumMode ? getMediumLineNoteLimit(start, end) : Number.POSITIVE_INFINITY;
+      let mediumLineNotesRendered = 0;
 
-    if (!summaryOnlyMode) {
-      for (const item of chunk.lines) {
-        const lineNumber = clamp(item.line, 1, lineCount);
-        if (isIgnorableLine(sourceLines, languageId, lineNumber)) {
-          continue;
-        }
-
-        if (mediumMode) {
-          if (mediumLineNotesRendered >= mediumLineNoteLimit) {
+      if (!summaryOnlyMode) {
+        for (const item of chunk.lines) {
+          const lineNumber = clamp(item.line, 1, lineCount);
+          if (isIgnorableLine(sourceLines, languageId, lineNumber)) {
             continue;
           }
-          if (sourceLines && isSimpleGroupedLine(sourceLines[lineNumber - 1] ?? '', languageId)) {
+
+          if (mediumMode) {
+            if (mediumLineNotesRendered >= mediumLineNoteLimit) {
+              continue;
+            }
+            if (sourceLines && isSimpleGroupedLine(sourceLines[lineNumber - 1] ?? '', languageId)) {
+              continue;
+            }
+          }
+
+          const lineIndex = lineNumber - 1;
+          const text = sanitizeLine(item.text);
+          if (!text || isBlankOrCommentNarration(text)) {
             continue;
           }
+          lines[lineIndex] = lines[lineIndex] ? `${lines[lineIndex]}  ${text}` : text;
+          mediumLineNotesRendered += mediumMode ? 1 : 0;
         }
-
-        const lineIndex = lineNumber - 1;
-        const text = sanitizeLine(item.text);
-        if (!text || isBlankOrCommentNarration(text)) {
-          continue;
-        }
-        lines[lineIndex] = lines[lineIndex] ? `${lines[lineIndex]}  ${text}` : text;
-        mediumLineNotesRendered += mediumMode ? 1 : 0;
       }
     }
 
@@ -125,6 +130,47 @@ function normalizeReviewItem(
     message: sanitizeLine(item.message),
     suggestion: sanitizeLine(item.suggestion)
   };
+}
+
+function renderStoryChunk(
+  lines: string[],
+  chunk: ExplanationResponse['chunks'][number],
+  sourceLines: string[] | undefined,
+  languageId: string,
+  lineCount: number,
+  anchor: number | undefined
+): void {
+  if (anchor === undefined) {
+    return;
+  }
+
+  const parts: string[] = [];
+  const summary = sanitizeLine(chunk.summary);
+  if (summary && !isBlankOrCommentNarration(summary)) {
+    parts.push(summary);
+  }
+
+  for (const item of [...chunk.lines].sort((a, b) => a.line - b.line)) {
+    const lineNumber = clamp(item.line, 1, lineCount);
+    if (isIgnorableLine(sourceLines, languageId, lineNumber)) {
+      continue;
+    }
+
+    const text = sanitizeLine(item.text);
+    if (!text || isBlankOrCommentNarration(text)) {
+      continue;
+    }
+
+    parts.push(text);
+  }
+
+  const narrative = parts.join(' ');
+  if (!narrative) {
+    return;
+  }
+
+  const lineIndex = anchor - 1;
+  lines[lineIndex] = lines[lineIndex] ? `${lines[lineIndex]}  ${narrative}` : narrative;
 }
 
 function hasAnyLineText(lines: string[], startLine: number, endLine: number): boolean {

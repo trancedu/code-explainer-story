@@ -350,6 +350,47 @@ test('renderExplanation lets story overflow stay on the final chunk row', () => 
   assert.ok(rendered.lines[2].length > 38);
 });
 
+test('renderExplanation keeps story prose in narrative order', () => {
+  const source = [
+    'def _post_json(url, payload):',
+    '    body = json.dumps(payload).encode()',
+    '    req = urllib.request.Request(url, data=body)',
+    '    with urllib.request.urlopen(req) as resp:',
+    '        return json.loads(resp.read().decode())'
+  ].join('\n');
+  const response: ExplanationResponse = {
+    fileSummary: 'Example',
+    chunks: [
+      {
+        id: 'chunk-1-1',
+        startLine: 1,
+        endLine: 5,
+        summary: 'The helper starts with a URL and payload, then prepares a proper API request before reading the JSON answer.',
+        lines: [
+          { line: 2, text: 'The payload is encoded into bytes because HTTP bodies travel as raw data.' },
+          { line: 3, text: 'The Request object combines the destination URL with the encoded body.' },
+          { line: 4, text: 'The network call sends the request and waits for the server reply.' },
+          { line: 5, text: 'Finally, the reply body is decoded and parsed back into JSON.' }
+        ],
+        review: []
+      }
+    ]
+  };
+
+  const rendered = renderExplanation(5, response, {
+    sourceText: source,
+    languageId: 'python',
+    level: 'story',
+    wrapColumn: 46
+  });
+  const narrative = rendered.lines.join(' ');
+
+  assert.ok(narrative.indexOf('proper API request') < narrative.indexOf('encoded into bytes'));
+  assert.ok(narrative.indexOf('encoded into bytes') < narrative.indexOf('Request object'));
+  assert.ok(narrative.indexOf('Request object') < narrative.indexOf('network call'));
+  assert.ok(narrative.indexOf('network call') < narrative.indexOf('Finally'));
+});
+
 test('sanitizeLine collapses all whitespace to one physical line', () => {
   assert.equal(sanitizeLine(' one\n two\t three  '), 'one two three');
 });
