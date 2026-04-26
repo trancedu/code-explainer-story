@@ -760,7 +760,7 @@ async function handleAskFollowUp(context: vscode.ExtensionContext, focus: Follow
       const client = config.provider === 'anthropic' ? new AnthropicClient() : new OpenAIClient();
 
       try {
-        const answer = await client.askQuestion(
+        const answer = await client.askQuestionStream(
           followUpSystemPrompt,
           buildFollowUpUserPrompt({
             fileName: config.includeFullPath ? document.uri.fsPath : path.basename(document.uri.fsPath),
@@ -775,6 +775,9 @@ async function handleAskFollowUp(context: vscode.ExtensionContext, focus: Follow
             apiKey,
             model: activeModel,
             signal: abortController.signal
+          },
+          (partialAnswer) => {
+            panel.showFollowUpPartial(partialAnswer);
           }
         );
         panel.showFollowUpAnswer(answer);

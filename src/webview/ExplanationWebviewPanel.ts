@@ -141,6 +141,13 @@ export class ExplanationWebviewPanel implements vscode.Disposable {
     });
   }
 
+  showFollowUpPartial(answer: string): void {
+    this.panel.webview.postMessage({
+      type: 'followUpPartial',
+      answer
+    });
+  }
+
   showFollowUpAnswer(answer: string): void {
     this.panel.webview.postMessage({
       type: 'followUpAnswer',
@@ -476,6 +483,12 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       font-weight: 700;
     }
 
+    .follow-up-card .actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
     .follow-up-card .question {
       padding: 8px 10px 0;
       color: var(--vscode-descriptionForeground);
@@ -518,7 +531,10 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
   <section class="follow-up-card" id="followUpCard" aria-live="polite">
     <header>
       <span>Follow-up answer</span>
-      <button id="closeFollowUp" class="secondary" type="button">Close</button>
+      <span class="actions">
+        <button id="askAnotherFollowUp" class="secondary" type="button">Ask another</button>
+        <button id="closeFollowUp" class="secondary" type="button">Close</button>
+      </span>
     </header>
     <div class="question" id="followUpQuestion"></div>
     <div class="answer" id="followUpAnswer"></div>
@@ -546,10 +562,12 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
     const followUpMenu = document.getElementById('followUpMenu');
     const askFollowUp = document.getElementById('askFollowUp');
     const followUpCard = document.getElementById('followUpCard');
+    const askAnotherFollowUp = document.getElementById('askAnotherFollowUp');
     const closeFollowUp = document.getElementById('closeFollowUp');
     const followUpQuestion = document.getElementById('followUpQuestion');
     const followUpAnswer = document.getElementById('followUpAnswer');
     let followUpFocus = undefined;
+    let followUpBusy = false;
 
     refresh.addEventListener('click', () => postCommand({ command: 'refresh' }));
     model.addEventListener('click', () => postCommand({ command: 'setModel' }));
@@ -565,11 +583,10 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
     reset.addEventListener('click', () => postCommand({ command: 'resetOffset' }));
     level.addEventListener('change', () => postCommand({ command: 'setLevel', level: level.value }));
     askFollowUp.addEventListener('click', () => {
-      if (followUpFocus) {
-        vscode.postMessage({ type: 'askFollowUp', line: followUpFocus.line, endLine: followUpFocus.endLine });
-      }
+      requestFollowUp();
       closeFollowUpMenu();
     });
+    askAnotherFollowUp.addEventListener('click', requestFollowUp);
     closeFollowUp.addEventListener('click', () => {
       followUpCard.classList.remove('open');
     });
@@ -634,19 +651,31 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       }
 
       if (message.type === 'followUpThinking') {
+        followUpBusy = true;
         showFollowUpCard(message.question, 'Thinking...');
+        updateFollowUpActions();
         return;
       }
 
-      if (message.type === 'followUpAnswer') {
+      if (message.type === 'followUpPartial') {
         followUpAnswer.textContent = message.answer || '';
         followUpCard.classList.add('open');
         return;
       }
 
+      if (message.type === 'followUpAnswer') {
+        followUpBusy = false;
+        followUpAnswer.textContent = message.answer || '';
+        followUpCard.classList.add('open');
+        updateFollowUpActions();
+        return;
+      }
+
       if (message.type === 'followUpError') {
+        followUpBusy = false;
         followUpAnswer.textContent = message.message || 'Follow-up request failed.';
         followUpCard.classList.add('open');
+        updateFollowUpActions();
       }
     });
 
@@ -815,6 +844,18 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       followUpQuestion.textContent = question ? 'Q: ' + question : '';
       followUpAnswer.textContent = answer;
       followUpCard.classList.add('open');
+    }
+
+    function requestFollowUp() {
+      if (!followUpFocus || followUpBusy) {
+        return;
+      }
+
+      vscode.postMessage({ type: 'askFollowUp', line: followUpFocus.line, endLine: followUpFocus.endLine });
+    }
+
+    function updateFollowUpActions() {
+      askAnotherFollowUp.disabled = followUpBusy || !followUpFocus;
     }
 
     function scrollTopToLine(scrollTop, lineHeight, lineCount) {

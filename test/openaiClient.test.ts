@@ -193,6 +193,37 @@ test('OpenAIClient uses medium reasoning effort for walkthrough mode', async () 
   assert.equal(requestBody.reasoning.effort, 'medium');
 });
 
+test('OpenAIClient streams follow-up answers as text deltas', async () => {
+  let requestBody: any;
+  const partials: string[] = [];
+  const client = new OpenAIClient(async (_url, init) => {
+    requestBody = JSON.parse(String(init.body));
+    return streamResponse([
+      { type: 'response.output_text.delta', delta: 'First ' },
+      { type: 'response.output_text.delta', delta: 'second.' },
+      { type: 'response.completed' }
+    ]);
+  });
+
+  const answer = await client.askQuestionStream(
+    'System prompt',
+    'User prompt',
+    {
+      apiKey: 'sk-test',
+      model: 'gpt-5.4-mini'
+    },
+    (partial) => {
+      partials.push(partial);
+    }
+  );
+
+  assert.equal(requestBody.stream, true);
+  assert.equal(requestBody.input[0].content, 'System prompt');
+  assert.equal(requestBody.input[1].content, 'User prompt');
+  assert.deepEqual(partials, ['First ', 'First second.']);
+  assert.equal(answer, 'First second.');
+});
+
 test('extractCompletedChunksFromJsonText ignores incomplete trailing chunks', () => {
   const completeChunk = {
     id: 'chunk-1-1',

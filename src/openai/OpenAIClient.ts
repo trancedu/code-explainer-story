@@ -73,6 +73,40 @@ export class OpenAIClient {
     return extractOutputText(raw);
   }
 
+  async askQuestionStream(
+    systemText: string,
+    userText: string,
+    options: GenerateOptions,
+    onPartialText: (text: string) => void | Promise<void>
+  ): Promise<string> {
+    const body = {
+      model: options.model,
+      stream: true,
+      reasoning: { effort: 'low' },
+      input: [
+        { role: 'system', content: systemText },
+        { role: 'user', content: userText }
+      ]
+    };
+
+    const response = await this.fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      signal: options.signal,
+      headers: {
+        Authorization: `Bearer ${options.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      const rawText = await response.text();
+      throw new Error(`OpenAI request failed (${response.status} ${response.statusText}): ${redact(rawText, options.apiKey)}`);
+    }
+
+    return readStreamingTextOutput(response, options.apiKey, onPartialText);
+  }
+
   private async request(
     payload: FilePayload,
     options: GenerateOptions,
@@ -121,7 +155,7 @@ export class OpenAIClient {
     }
 
     if (stream) {
-      return readStreamingOutput(response, options.apiKey, onChunk);
+      return readStreamingJsonOutput(response, options.apiKey, onChunk);
     }
 
     return response.text();
@@ -188,18 +222,41 @@ export function extractCompletedChunksFromJsonText(text: string): ExplanationChu
   return chunks;
 }
 
-async function readStreamingOutput(
+async function readStreamingJsonOutput(
   response: ResponseLike,
   apiKey: string,
   onChunk?: (chunk: ExplanationChunk) => void | Promise<void>
 ): Promise<string> {
+  const emittedChunkIds = new Set<string>();
+  return readStreamingTextOutput(response, apiKey, async (outputText) => {
+    if (!onChunk) {
+      return;
+    }
+
+    for (const chunk of extractCompletedChunksFromJsonText(outputText)) {
+      if (emittedChunkIds.has(chunk.id)) {
+        continue;
+      }
+
+      emittedChunkIds.add(chunk.id);
+      await onChunk(chunk);
+    }
+  });
+}
+
+async function readStreamingTextOutput(
+  response: ResponseLike,
+  apiKey: string,
+  onPartialText?: (text: string) => void | Promise<void>
+): Promise<string> {
   if (!response.body) {
     const raw = parseJson(await response.text(), 'OpenAI API response was not valid JSON.');
-    return extractOutputText(raw);
+    const outputText = extractOutputText(raw);
+    await onPartialText?.(outputText);
+    return outputText;
   }
 
   let outputText = '';
-  const emittedChunkIds = new Set<string>();
 
   for await (const eventData of readServerSentEvents(response.body)) {
     if (eventData === '[DONE]') {
@@ -213,23 +270,12 @@ async function readStreamingOutput(
 
     if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') {
       outputText += event.delta;
+      await onPartialText?.(outputText);
     } else if (event.type === 'response.output_text.done' && typeof event.text === 'string') {
       outputText = event.text;
+      await onPartialText?.(outputText);
     } else if (event.type === 'error' || isObject(event.error)) {
       throw new Error(`OpenAI stream failed: ${redact(JSON.stringify(event), apiKey)}`);
-    }
-
-    if (!onChunk) {
-      continue;
-    }
-
-    for (const chunk of extractCompletedChunksFromJsonText(outputText)) {
-      if (emittedChunkIds.has(chunk.id)) {
-        continue;
-      }
-
-      emittedChunkIds.add(chunk.id);
-      await onChunk(chunk);
     }
   }
 

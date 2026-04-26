@@ -77,6 +77,42 @@ export class AnthropicClient {
     return extractOutputText(raw);
   }
 
+  async askQuestionStream(
+    systemText: string,
+    userText: string,
+    options: AnthropicGenerateOptions,
+    onPartialText: (text: string) => void | Promise<void>
+  ): Promise<string> {
+    const response = await this.fetchImpl('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: options.signal,
+      headers: {
+        'x-api-key': options.apiKey,
+        'anthropic-version': anthropicVersion,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: options.model,
+        max_tokens: 2048,
+        stream: true,
+        system: systemText,
+        messages: [
+          {
+            role: 'user',
+            content: userText
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const rawText = await response.text();
+      throw new Error(`Claude request failed (${response.status} ${response.statusText}): ${redact(rawText, options.apiKey)}`);
+    }
+
+    return readStreamingTextOutput(response, options.apiKey, onPartialText);
+  }
+
   private async request(
     payload: FilePayload,
     options: AnthropicGenerateOptions,
@@ -111,7 +147,7 @@ export class AnthropicClient {
     }
 
     if (stream) {
-      return readStreamingOutput(response, options.apiKey, onChunk);
+      return readStreamingJsonOutput(response, options.apiKey, onChunk);
     }
 
     const raw = parseJson(await response.text(), 'Claude API response was not valid JSON.');
@@ -128,18 +164,41 @@ function buildUserPrompt(payload: FilePayload): string {
   ].join('\n\n');
 }
 
-async function readStreamingOutput(
+async function readStreamingJsonOutput(
   response: ResponseLike,
   apiKey: string,
   onChunk?: (chunk: ExplanationChunk) => void | Promise<void>
 ): Promise<string> {
+  const emittedChunkIds = new Set<string>();
+  return readStreamingTextOutput(response, apiKey, async (outputText) => {
+    if (!onChunk) {
+      return;
+    }
+
+    for (const chunk of extractCompletedChunksFromJsonText(outputText)) {
+      if (emittedChunkIds.has(chunk.id)) {
+        continue;
+      }
+
+      emittedChunkIds.add(chunk.id);
+      await onChunk(chunk);
+    }
+  });
+}
+
+async function readStreamingTextOutput(
+  response: ResponseLike,
+  apiKey: string,
+  onPartialText?: (text: string) => void | Promise<void>
+): Promise<string> {
   if (!response.body) {
     const raw = parseJson(await response.text(), 'Claude API response was not valid JSON.');
-    return extractOutputText(raw);
+    const outputText = extractOutputText(raw);
+    await onPartialText?.(outputText);
+    return outputText;
   }
 
   let outputText = '';
-  const emittedChunkIds = new Set<string>();
 
   for await (const eventData of readServerSentEvents(response.body)) {
     const event = parseJson(eventData, 'Claude stream event was not valid JSON.');
@@ -156,21 +215,9 @@ async function readStreamingOutput(
 
     if (isTextDelta) {
       outputText += delta.text;
+      await onPartialText?.(outputText);
     } else if (event.type === 'error' || isObject(event.error)) {
       throw new Error(`Claude stream failed: ${redact(JSON.stringify(event), apiKey)}`);
-    }
-
-    if (!onChunk) {
-      continue;
-    }
-
-    for (const chunk of extractCompletedChunksFromJsonText(outputText)) {
-      if (emittedChunkIds.has(chunk.id)) {
-        continue;
-      }
-
-      emittedChunkIds.add(chunk.id);
-      await onChunk(chunk);
     }
   }
 

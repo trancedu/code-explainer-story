@@ -125,6 +125,46 @@ test('AnthropicClient streams completed chunks before the final JSON closes', as
   assert.equal(result.chunks[0].summary, 'Writes text to the console.');
 });
 
+test('AnthropicClient streams follow-up answers as text deltas', async () => {
+  let requestBody: Record<string, any> | undefined;
+  const partials: string[] = [];
+  const client = new AnthropicClient(async (_url, init) => {
+    requestBody = JSON.parse(String(init.body));
+    return streamResponse([
+      {
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'text_delta', text: 'First ' }
+      },
+      {
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'text_delta', text: 'second.' }
+      },
+      { type: 'message_stop' }
+    ]);
+  });
+
+  const answer = await client.askQuestionStream(
+    'System prompt',
+    'User prompt',
+    {
+      apiKey: 'sk-ant-test',
+      model: 'claude-sonnet-4-6'
+    },
+    (partial) => {
+      partials.push(partial);
+    }
+  );
+
+  assert(requestBody);
+  assert.equal(requestBody.stream, true);
+  assert.equal(requestBody.system, 'System prompt');
+  assert.equal(requestBody.messages[0].content, 'User prompt');
+  assert.deepEqual(partials, ['First ', 'First second.']);
+  assert.equal(answer, 'First second.');
+});
+
 test('AnthropicClient redacts API key from error bodies', async () => {
   const client = new AnthropicClient(async () => ({
     ok: false,

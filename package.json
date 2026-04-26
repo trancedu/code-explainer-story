@@ -2,7 +2,7 @@
   "name": "code-explainer",
   "displayName": "Code Explainer",
   "description": "Side-by-side, line-synced code explanations for VS Code.",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "publisher": "local",
   "private": true,
   "engines": {
@@ -314,6 +314,13 @@
           "command": "codeExplainer.resetSyncOffset",
           "when": "resourceScheme == code-explainer",
           "group": "2_sync@3"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "codeExplainer.explainCurrentFile",
+          "when": "resourceScheme == file",
+          "group": "7_codeExplainer@1"
         }
       ],
       "explorer/context": [

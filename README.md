@@ -22,9 +22,9 @@ Code Explainer opens a source file beside a generated English explanation. The s
 - `Code Explainer: Set Anthropic API Key`
 - `Code Explainer: Clear Anthropic API Key`
 
-You can also right-click any file in the Explorer side bar and choose `Code Explainer: Explain Current File` to run the explainer without opening that file in the editor first.
+You can also right-click any file in the Explorer side bar, or right-click an editor tab in the top bar, and choose `Code Explainer: Explain Current File` to run the explainer for that file.
 
-In the explanation panel, right-click a row and choose `Ask follow-up question` to ask about that source line. In walkthrough mode, right-clicking a paragraph asks about the whole mapped source chunk. The answer appears in a floating card over the explanation panel without changing the line layout or saved explanation.
+In the explanation panel, right-click a row and choose `Ask follow-up question` to ask about that source line. In walkthrough mode, right-clicking a paragraph asks about the whole mapped source chunk. The answer streams into a floating card over the explanation panel without changing the line layout or saved explanation, and the card can ask another question about the same focus.
 
 When an explanation panel is open, its top header always shows the current model, inline mode, explanation level, review mode, sync offset, refresh action, and cache action. The status bar also shows the current level and model.
 
