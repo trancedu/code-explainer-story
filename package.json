@@ -16,6 +16,7 @@
     "onCommand:codeExplainer.refreshExplanation",
     "onCommand:codeExplainer.setModel",
     "onCommand:codeExplainer.setExplanationLevel",
+    "onCommand:codeExplainer.toggleInlineExplanations",
     "onCommand:codeExplainer.toggleReviewMode",
     "onCommand:codeExplainer.clearCache",
     "onCommand:codeExplainer.saveCurrentExplanation",
@@ -60,6 +61,11 @@
         "command": "codeExplainer.setExplanationLevel",
         "title": "Code Explainer: Set Explanation Level",
         "icon": "$(list-selection)"
+      },
+      {
+        "command": "codeExplainer.toggleInlineExplanations",
+        "title": "Code Explainer: Toggle Inline Explanations",
+        "icon": "$(symbol-key)"
       },
       {
         "command": "codeExplainer.toggleReviewMode",
@@ -143,6 +149,29 @@
           "type": "boolean",
           "default": false,
           "description": "Include review findings alongside explanations."
+        },
+        "codeExplainer.inline.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show generated explanations near source code with CodeLens, hover text, and short end-of-line decorations."
+        },
+        "codeExplainer.inline.maxHints": {
+          "type": "number",
+          "default": 80,
+          "minimum": 1,
+          "description": "Maximum inline explanation hints shown per file."
+        },
+        "codeExplainer.inline.maxTextLength": {
+          "type": "number",
+          "default": 96,
+          "minimum": 20,
+          "description": "Maximum characters used in CodeLens and end-of-line inline explanations."
+        },
+        "codeExplainer.inline.maxCodeColumns": {
+          "type": "number",
+          "default": 100,
+          "minimum": 20,
+          "description": "Only show end-of-line inline text on source lines at or below this width; wider lines still use CodeLens and hover."
         },
         "codeExplainer.syncLineOffset": {
           "type": "number",
@@ -239,19 +268,24 @@
           "group": "navigation@3"
         },
         {
-          "command": "codeExplainer.toggleReviewMode",
+          "command": "codeExplainer.toggleInlineExplanations",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@4"
         },
         {
-          "command": "codeExplainer.clearCache",
+          "command": "codeExplainer.toggleReviewMode",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@5"
         },
         {
-          "command": "codeExplainer.saveCurrentExplanation",
+          "command": "codeExplainer.clearCache",
           "when": "resourceScheme == code-explainer",
           "group": "navigation@6"
+        },
+        {
+          "command": "codeExplainer.saveCurrentExplanation",
+          "when": "resourceScheme == code-explainer",
+          "group": "navigation@7"
         },
         {
           "command": "codeExplainer.decreaseSyncOffset",

@@ -1,0 +1,152 @@
+import * as vscode from 'vscode';
+import { CodeExplainerConfig } from '../config';
+import { resolveExplanationAnchorLine } from '../analysis/explanationAnchors';
+import { ExplanationStore, StoredExplanation, hashText } from '../state/ExplanationStore';
+import { buildInlineHints, InlineHint } from './inlineHints';
+
+export class InlineExplanationController implements vscode.CodeLensProvider, vscode.HoverProvider, vscode.Disposable {
+  private readonly onDidChangeCodeLensesEmitter = new vscode.EventEmitter<void>();
+  readonly onDidChangeCodeLenses = this.onDidChangeCodeLensesEmitter.event;
+
+  private readonly hintDecorationType = vscode.window.createTextEditorDecorationType({
+    after: {
+      color: new vscode.ThemeColor('editorCodeLens.foreground'),
+      fontStyle: 'italic',
+      margin: '0 0 0 2ch'
+    },
+    rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
+  });
+
+  constructor(
+    private readonly store: ExplanationStore,
+    private readonly getConfig: () => CodeExplainerConfig
+  ) {}
+
+  provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+    const config = this.getConfig();
+    if (!config.inlineEnabled || document.uri.scheme !== 'file') {
+      return [];
+    }
+
+    const stored = this.getFreshStored(document, config);
+    if (!stored) {
+      return [];
+    }
+
+    return this.buildHints(document, stored.rendered.lines).map(
+      (hint) =>
+        new vscode.CodeLens(new vscode.Range(hint.line - 1, 0, hint.line - 1, 0), {
+          title: `$(book) ${hint.text}`,
+          command: 'codeExplainer.showExplanationAtLine',
+          arguments: [document.uri, hint.line]
+        })
+    );
+  }
+
+  provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
+    const config = this.getConfig();
+    if (!config.inlineEnabled || document.uri.scheme !== 'file') {
+      return undefined;
+    }
+
+    const stored = this.getFreshStored(document, config);
+    if (!stored) {
+      return undefined;
+    }
+
+    const anchorLine = resolveExplanationAnchorLine(stored.rendered.lines, position.line + 1);
+    if (anchorLine === undefined) {
+      return undefined;
+    }
+
+    const text = stored.rendered.lines[anchorLine - 1]?.trim();
+    if (!text) {
+      return undefined;
+    }
+
+    const markdown = new vscode.MarkdownString();
+    markdown.appendMarkdown('**Code Explainer**\n\n');
+    markdown.appendText(text);
+    return new vscode.Hover(markdown, document.lineAt(position.line).range);
+  }
+
+  refresh(uri?: vscode.Uri): void {
+    this.onDidChangeCodeLensesEmitter.fire();
+    this.updateVisibleEditors(uri);
+  }
+
+  updateVisibleEditors(uri?: vscode.Uri): void {
+    const config = this.getConfig();
+    for (const editor of vscode.window.visibleTextEditors) {
+      if (uri && editor.document.uri.toString() !== uri.toString()) {
+        continue;
+      }
+
+      this.updateEditor(editor, config);
+    }
+  }
+
+  dispose(): void {
+    this.onDidChangeCodeLensesEmitter.dispose();
+    this.hintDecorationType.dispose();
+  }
+
+  private updateEditor(editor: vscode.TextEditor, config: CodeExplainerConfig): void {
+    if (!config.inlineEnabled || editor.document.uri.scheme !== 'file') {
+      editor.setDecorations(this.hintDecorationType, []);
+      return;
+    }
+
+    const stored = this.getFreshStored(editor.document, config);
+    if (!stored) {
+      editor.setDecorations(this.hintDecorationType, []);
+      return;
+    }
+
+    const decorations = this.buildHints(editor.document, stored.rendered.lines)
+      .filter((hint) => hint.showAfterCode)
+      .map((hint) => this.toDecoration(editor.document, hint));
+    editor.setDecorations(this.hintDecorationType, decorations);
+  }
+
+  private buildHints(document: vscode.TextDocument, explanationLines: string[]): InlineHint[] {
+    const config = this.getConfig();
+    const sourceLines: string[] = [];
+    for (let index = 0; index < document.lineCount; index += 1) {
+      sourceLines.push(document.lineAt(index).text);
+    }
+
+    return buildInlineHints(explanationLines, sourceLines, {
+      maxHints: config.inlineMaxHints,
+      maxTextLength: config.inlineMaxTextLength,
+      maxCodeColumns: config.inlineMaxCodeColumns
+    });
+  }
+
+  private getFreshStored(document: vscode.TextDocument, config: CodeExplainerConfig): StoredExplanation | undefined {
+    const stored = this.store.getBySource(document.uri);
+    if (
+      !stored ||
+      stored.key.contentHash !== hashText(document.getText()) ||
+      stored.key.model !== config.model ||
+      stored.key.level !== config.explanationLevel ||
+      stored.key.reviewEnabled !== config.reviewEnabled
+    ) {
+      return undefined;
+    }
+
+    return stored;
+  }
+
+  private toDecoration(document: vscode.TextDocument, hint: InlineHint): vscode.DecorationOptions {
+    const line = document.lineAt(hint.line - 1);
+    return {
+      range: new vscode.Range(line.range.end, line.range.end),
+      renderOptions: {
+        after: {
+          contentText: `  Code Explainer: ${hint.text}`
+        }
+      }
+    };
+  }
+}

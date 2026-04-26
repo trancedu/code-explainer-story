@@ -6,6 +6,10 @@ export type CodeExplainerConfig = {
   modelPresets: string[];
   explanationLevel: ExplanationLevel;
   reviewEnabled: boolean;
+  inlineEnabled: boolean;
+  inlineMaxHints: number;
+  inlineMaxTextLength: number;
+  inlineMaxCodeColumns: number;
   syncLineOffset: number;
   webviewHeaderHeight: number;
   maxFileLines: number;
@@ -29,6 +33,10 @@ export function getCodeExplainerConfig(): CodeExplainerConfig {
     modelPresets: config.get<string[]>('modelPresets', ['gpt-5.4-mini', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2']),
     explanationLevel: levels.has(level as ExplanationLevel) ? (level as ExplanationLevel) : 'medium',
     reviewEnabled: config.get<boolean>('reviewEnabled', false),
+    inlineEnabled: config.get<boolean>('inline.enabled', false),
+    inlineMaxHints: config.get<number>('inline.maxHints', 80),
+    inlineMaxTextLength: config.get<number>('inline.maxTextLength', 96),
+    inlineMaxCodeColumns: config.get<number>('inline.maxCodeColumns', 100),
     syncLineOffset: config.get<number>('syncLineOffset', 0),
     webviewHeaderHeight: config.get<number>('webviewHeaderHeight', 42),
     maxFileLines: config.get<number>('maxFileLines', 3000),
@@ -40,6 +48,12 @@ export function getCodeExplainerConfig(): CodeExplainerConfig {
     includeFullPath: config.get<boolean>('privacy.includeFullPath', false),
     excludedGlobs: config.get<string[]>('excludedGlobs', [])
   };
+}
+
+export async function setInlineEnabled(enabled: boolean): Promise<void> {
+  await vscode.workspace
+    .getConfiguration('codeExplainer')
+    .update('inline.enabled', enabled, vscode.ConfigurationTarget.Global);
 }
 
 export async function setOpenAIModel(model: string): Promise<void> {

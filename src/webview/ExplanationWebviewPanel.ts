@@ -8,6 +8,7 @@ export type ExplanationWebviewCommand =
   | { command: 'refresh' }
   | { command: 'setModel' }
   | { command: 'setLevel'; level: string }
+  | { command: 'toggleInline' }
   | { command: 'toggleReview' }
   | { command: 'clearCache' }
   | { command: 'increaseOffset' }
@@ -31,6 +32,7 @@ type WebviewState = {
   fileName: string;
   model: string;
   level: string;
+  inlineEnabled: boolean;
   reviewEnabled: boolean;
   syncOffset: number;
   headerHeight: number;
@@ -176,6 +178,7 @@ function toWebviewState(
     fileName: path.basename(stored.sourceUri.fsPath),
     model: config.model,
     level: config.explanationLevel,
+    inlineEnabled: config.inlineEnabled,
     reviewEnabled: config.reviewEnabled,
     syncOffset: config.syncLineOffset,
     headerHeight: config.webviewHeaderHeight,
@@ -334,6 +337,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 <body>
   <div class="toolbar">
     <button id="model" class="secondary model" title="Change OpenAI model"></button>
+    <button id="inline" class="secondary"></button>
     <label>Level <select id="level">
       <option value="concise">concise</option>
       <option value="medium">medium</option>
@@ -358,6 +362,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
     let suppressScrollUntil = 0;
 
     const model = document.getElementById('model');
+    const inline = document.getElementById('inline');
     const level = document.getElementById('level');
     const review = document.getElementById('review');
     const refresh = document.getElementById('refresh');
@@ -371,6 +376,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 
     refresh.addEventListener('click', () => postCommand({ command: 'refresh' }));
     model.addEventListener('click', () => postCommand({ command: 'setModel' }));
+    inline.addEventListener('click', () => postCommand({ command: 'toggleInline' }));
     clear.addEventListener('click', () => postCommand({ command: 'clearCache' }));
     review.addEventListener('click', () => postCommand({ command: 'toggleReview' }));
     minus.addEventListener('click', () => postCommand({ command: 'decreaseOffset' }));
@@ -433,6 +439,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       level.value = state.level;
       model.textContent = 'Model ' + state.model;
       model.title = 'Change OpenAI model: ' + state.model;
+      inline.textContent = state.inlineEnabled ? 'Inline on' : 'Inline off';
       review.textContent = state.reviewEnabled ? 'Review on' : 'Review off';
       offset.textContent = formatOffset(state.syncOffset);
 

@@ -18,6 +18,7 @@ export class StatusBarController implements vscode.Disposable {
       'Code Explainer settings',
       `Model: ${config.model}`,
       `Level: ${config.explanationLevel}`,
+      `Inline: ${config.inlineEnabled ? 'on' : 'off'}`,
       `Review: ${config.reviewEnabled ? 'on' : 'off'}`,
       `Sync offset: ${offset}`,
       'Click to change explanation level. Use Code Explainer: Set OpenAI Model to change models.'

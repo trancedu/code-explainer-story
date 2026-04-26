@@ -4,8 +4,16 @@ import { buildChunks } from './analysis/Chunker';
 import { effectiveMaxChunkLines } from './analysis/chunkLimits';
 import { resolveExplanationAnchorLine } from './analysis/explanationAnchors';
 import { renderExplanation, renderPendingExplanation } from './analysis/postProcess';
-import { getCodeExplainerConfig, setExplanationLevel, setOpenAIModel, setReviewEnabled, setSyncLineOffset } from './config';
+import {
+  getCodeExplainerConfig,
+  setExplanationLevel,
+  setInlineEnabled,
+  setOpenAIModel,
+  setReviewEnabled,
+  setSyncLineOffset
+} from './config';
 import { clearOpenAIKey, resolveOpenAIKey, storeOpenAIKey } from './devEnv';
+import { InlineExplanationController } from './inline/InlineExplanationController';
 import { OpenAIClient } from './openai/OpenAIClient';
 import {
   readSnapshot,
@@ -30,6 +38,7 @@ let store: ExplanationStore;
 let provider: ExplanationDocumentProvider;
 let diagnosticsController: DiagnosticsController;
 let statusBarController: StatusBarController;
+let inlineController: InlineExplanationController;
 let activeExplanationPanel: ExplanationWebviewPanel | undefined;
 let activeSourceEditor: vscode.TextEditor | undefined;
 let sourceScrollDebounce: NodeJS.Timeout | undefined;
@@ -44,15 +53,23 @@ export function activate(context: vscode.ExtensionContext): void {
   provider = new ExplanationDocumentProvider(store);
   diagnosticsController = new DiagnosticsController();
   statusBarController = new StatusBarController(getCodeExplainerConfig());
+  inlineController = new InlineExplanationController(store, getCodeExplainerConfig);
 
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider('code-explainer', provider),
+    vscode.languages.registerCodeLensProvider({ scheme: 'file' }, inlineController),
+    vscode.languages.registerHoverProvider({ scheme: 'file' }, inlineController),
     diagnosticsController,
     statusBarController,
+    inlineController,
     vscode.commands.registerCommand('codeExplainer.explainCurrentFile', () => explainCurrentFile(context)),
     vscode.commands.registerCommand('codeExplainer.refreshExplanation', () => explainCurrentFile(context, true)),
+    vscode.commands.registerCommand('codeExplainer.showExplanationAtLine', (uri: vscode.Uri, line: number) =>
+      showExplanationAtLine(uri, line)
+    ),
     vscode.commands.registerCommand('codeExplainer.setModel', chooseOpenAIModel),
     vscode.commands.registerCommand('codeExplainer.setExplanationLevel', chooseExplanationLevel),
+    vscode.commands.registerCommand('codeExplainer.toggleInlineExplanations', toggleInlineExplanations),
     vscode.commands.registerCommand('codeExplainer.toggleReviewMode', toggleReviewMode),
     vscode.commands.registerCommand('codeExplainer.clearCache', clearCache),
     vscode.commands.registerCommand('codeExplainer.saveCurrentExplanation', saveCurrentExplanation),
@@ -67,6 +84,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidSaveTextDocument((document) => void handleSavedDocument(context, document)),
     vscode.window.onDidChangeTextEditorVisibleRanges((event) => handleSourceVisibleRangesChanged(event)),
     vscode.window.onDidChangeTextEditorSelection((event) => handleSourceSelectionChanged(event)),
+    vscode.window.onDidChangeVisibleTextEditors(() => inlineController.updateVisibleEditors()),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('codeExplainer')) {
         refreshSettingsDisplay();
@@ -78,6 +96,7 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   diagnosticsController?.dispose();
   statusBarController?.dispose();
+  inlineController?.dispose();
   activeExplanationPanel?.dispose();
 }
 
@@ -133,6 +152,7 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
     if (snapshot && snapshotMatches(snapshot, contentHash, config, document.lineCount)) {
       const stored = store.put(requestKey, document.uri, renderedFromSnapshot(snapshot), config.cacheExplanations);
       diagnosticsController.update(document.uri, stored.rendered.reviewItems);
+      inlineController.refresh(document.uri);
       await openExplanation(editor, stored);
       return;
     }
@@ -185,6 +205,7 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
         provider.refresh(stored.explanationUri);
         activeExplanationPanel?.update(stored, getCodeExplainerConfig(), getEditorMetrics());
         diagnosticsController.update(document.uri, partial.reviewItems);
+        inlineController.refresh(document.uri);
         progress.report({ message: `Received ${streamedChunks.size}/${chunks.length} chunks...` });
       };
 
@@ -210,6 +231,7 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
         provider.refresh(stored.explanationUri);
         activeExplanationPanel?.update(stored, getCodeExplainerConfig(), getEditorMetrics());
         diagnosticsController.update(document.uri, rendered.reviewItems);
+        inlineController.refresh(document.uri);
         if (finalStored && config.persistExplanations) {
           await writeSnapshot(finalStored, config, document.languageId, document.lineCount);
         }
@@ -219,6 +241,7 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
         store.update(stored.id, failed, false);
         provider.refresh(stored.explanationUri);
         activeExplanationPanel?.update(stored, getCodeExplainerConfig(), getEditorMetrics());
+        inlineController.refresh(document.uri);
         vscode.window.showErrorMessage(`Code Explainer failed: ${message}`);
       }
     }
@@ -246,7 +269,25 @@ async function openExplanation(
   }
 
   activeExplanationPanel.update(stored, getCodeExplainerConfig(), getEditorMetrics());
+  inlineController.refresh(sourceEditor.document.uri);
   updateActiveLineFromEditor(sourceEditor);
+}
+
+async function showExplanationAtLine(uri: vscode.Uri, line: number): Promise<void> {
+  const document = await vscode.workspace.openTextDocument(uri);
+  const editor = await vscode.window.showTextDocument(document, {
+    preview: false,
+    preserveFocus: false
+  });
+  const stored = store.getBySource(uri);
+  if (stored) {
+    await openExplanation(editor, stored);
+  }
+
+  const targetLine = Math.max(0, Math.min(document.lineCount - 1, line - 1));
+  editor.selection = new vscode.Selection(targetLine, 0, targetLine, 0);
+  editor.revealRange(new vscode.Range(targetLine, 0, targetLine, 0), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+  activeExplanationPanel?.setActiveLine(resolveRightPanelAnchorLine(line));
 }
 
 async function chooseOpenAIModel(): Promise<void> {
@@ -292,6 +333,14 @@ async function chooseOpenAIModel(): Promise<void> {
   await setOpenAIModel(nextModel);
   refreshSettingsDisplay();
   vscode.window.showInformationMessage(`Code Explainer model set to ${nextModel}.`);
+}
+
+async function toggleInlineExplanations(): Promise<void> {
+  const config = getCodeExplainerConfig();
+  const nextValue = !config.inlineEnabled;
+  await setInlineEnabled(nextValue);
+  refreshSettingsDisplay();
+  vscode.window.showInformationMessage(`Code Explainer inline explanations ${nextValue ? 'enabled' : 'disabled'}.`);
 }
 
 async function chooseExplanationLevel(): Promise<void> {
@@ -421,6 +470,7 @@ function markStaleIfExplained(document: vscode.TextDocument): void {
   const existing = store.getBySource(document.uri);
   if (existing && existing.key.documentVersion !== document.version) {
     diagnosticsController.clear(document.uri);
+    inlineController.refresh(document.uri);
     vscode.window.setStatusBarMessage('Code Explainer: explanation is stale. Run Refresh Explanation.', 6000);
   }
 }
@@ -627,6 +677,9 @@ async function handleExplanationPanelCommand(message: ExplanationWebviewCommand)
         refreshSettingsDisplay();
       }
       break;
+    case 'toggleInline':
+      await toggleInlineExplanations();
+      break;
     case 'toggleReview':
       await toggleReviewMode();
       break;
@@ -648,6 +701,7 @@ async function handleExplanationPanelCommand(message: ExplanationWebviewCommand)
 function refreshSettingsDisplay(): void {
   const config = getCodeExplainerConfig();
   statusBarController.update(config);
+  inlineController.refresh();
   const stored = activeSourceEditor ? store.getBySource(activeSourceEditor.document.uri) : undefined;
   if (stored) {
     activeExplanationPanel?.update(stored, config, getEditorMetrics());
