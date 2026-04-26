@@ -22,7 +22,7 @@ Code Explainer opens a source file beside a generated English explanation. The s
 
 When an explanation panel is open, its top header always shows the current model, inline mode, explanation level, review mode, sync offset, refresh action, and cache action. The status bar also shows the current level and model.
 
-Inline explanations are optional. Turn them on with `Code Explainer: Toggle Inline Explanations` or the `Inline` button in the explanation header. Inline mode shows CodeLens summaries above explained chunks, hover text on nearby code, and short end-of-line hints when the source line is not too wide. The right-side panel remains the complete collected view.
+Inline explanations are optional. Turn them on with `Code Explainer: Toggle Inline Explanations` or the `Inline` button in the explanation header. Inline mode shows hover text on nearby code and short end-of-line hints when the source line is not too wide. The right-side panel remains the complete collected view.
 
 The fixed header helps compensate for source-editor top content such as breadcrumbs, CodeLens, or blame annotations. Because of that, `codeExplainer.syncLineOffset` now defaults to `0`; use the offset commands only if your right pane is still a line or two high/low.
 

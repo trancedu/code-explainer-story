@@ -4,10 +4,7 @@ import { resolveExplanationAnchorLine } from '../analysis/explanationAnchors';
 import { ExplanationStore, StoredExplanation, hashText } from '../state/ExplanationStore';
 import { buildInlineHints, InlineHint } from './inlineHints';
 
-export class InlineExplanationController implements vscode.CodeLensProvider, vscode.HoverProvider, vscode.Disposable {
-  private readonly onDidChangeCodeLensesEmitter = new vscode.EventEmitter<void>();
-  readonly onDidChangeCodeLenses = this.onDidChangeCodeLensesEmitter.event;
-
+export class InlineExplanationController implements vscode.HoverProvider, vscode.Disposable {
   private readonly hintDecorationType = vscode.window.createTextEditorDecorationType({
     after: {
       color: new vscode.ThemeColor('editorCodeLens.foreground'),
@@ -21,27 +18,6 @@ export class InlineExplanationController implements vscode.CodeLensProvider, vsc
     private readonly store: ExplanationStore,
     private readonly getConfig: () => CodeExplainerConfig
   ) {}
-
-  provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
-    const config = this.getConfig();
-    if (!config.inlineEnabled || document.uri.scheme !== 'file') {
-      return [];
-    }
-
-    const stored = this.getFreshStored(document, config);
-    if (!stored) {
-      return [];
-    }
-
-    return this.buildHints(document, stored.rendered.lines).map(
-      (hint) =>
-        new vscode.CodeLens(new vscode.Range(hint.line - 1, 0, hint.line - 1, 0), {
-          title: `$(book) ${hint.text}`,
-          command: 'codeExplainer.showExplanationAtLine',
-          arguments: [document.uri, hint.line]
-        })
-    );
-  }
 
   provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
     const config = this.getConfig();
@@ -71,7 +47,6 @@ export class InlineExplanationController implements vscode.CodeLensProvider, vsc
   }
 
   refresh(uri?: vscode.Uri): void {
-    this.onDidChangeCodeLensesEmitter.fire();
     this.updateVisibleEditors(uri);
   }
 
@@ -87,7 +62,6 @@ export class InlineExplanationController implements vscode.CodeLensProvider, vsc
   }
 
   dispose(): void {
-    this.onDidChangeCodeLensesEmitter.dispose();
     this.hintDecorationType.dispose();
   }
 

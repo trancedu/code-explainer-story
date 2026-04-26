@@ -57,16 +57,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider('code-explainer', provider),
-    vscode.languages.registerCodeLensProvider({ scheme: 'file' }, inlineController),
     vscode.languages.registerHoverProvider({ scheme: 'file' }, inlineController),
     diagnosticsController,
     statusBarController,
     inlineController,
     vscode.commands.registerCommand('codeExplainer.explainCurrentFile', () => explainCurrentFile(context)),
     vscode.commands.registerCommand('codeExplainer.refreshExplanation', () => explainCurrentFile(context, true)),
-    vscode.commands.registerCommand('codeExplainer.showExplanationAtLine', (uri: vscode.Uri, line: number) =>
-      showExplanationAtLine(uri, line)
-    ),
     vscode.commands.registerCommand('codeExplainer.setModel', chooseOpenAIModel),
     vscode.commands.registerCommand('codeExplainer.setExplanationLevel', chooseExplanationLevel),
     vscode.commands.registerCommand('codeExplainer.toggleInlineExplanations', toggleInlineExplanations),
@@ -271,23 +267,6 @@ async function openExplanation(
   activeExplanationPanel.update(stored, getCodeExplainerConfig(), getEditorMetrics());
   inlineController.refresh(sourceEditor.document.uri);
   updateActiveLineFromEditor(sourceEditor);
-}
-
-async function showExplanationAtLine(uri: vscode.Uri, line: number): Promise<void> {
-  const document = await vscode.workspace.openTextDocument(uri);
-  const editor = await vscode.window.showTextDocument(document, {
-    preview: false,
-    preserveFocus: false
-  });
-  const stored = store.getBySource(uri);
-  if (stored) {
-    await openExplanation(editor, stored);
-  }
-
-  const targetLine = Math.max(0, Math.min(document.lineCount - 1, line - 1));
-  editor.selection = new vscode.Selection(targetLine, 0, targetLine, 0);
-  editor.revealRange(new vscode.Range(targetLine, 0, targetLine, 0), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-  activeExplanationPanel?.setActiveLine(resolveRightPanelAnchorLine(line));
 }
 
 async function chooseOpenAIModel(): Promise<void> {

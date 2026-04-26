@@ -153,7 +153,7 @@
         "codeExplainer.inline.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Show generated explanations near source code with CodeLens, hover text, and short end-of-line decorations."
+          "description": "Show generated explanations near source code with hover text and short end-of-line decorations."
         },
         "codeExplainer.inline.maxHints": {
           "type": "number",
@@ -165,7 +165,7 @@
           "type": "number",
           "default": 96,
           "minimum": 20,
-          "description": "Maximum characters used in CodeLens and end-of-line inline explanations."
+          "description": "Maximum characters used in end-of-line inline explanations."
         },
         "codeExplainer.inline.maxCodeColumns": {
           "type": "number",
