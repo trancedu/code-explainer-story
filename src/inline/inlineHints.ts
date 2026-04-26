@@ -16,10 +16,7 @@ export function buildInlineHints(
   options: InlineHintOptions
 ): InlineHint[] {
   const hints: InlineHint[] = [];
-  const maxHints = Math.max(0, options.maxHints);
-  if (maxHints === 0) {
-    return hints;
-  }
+  const maxHints = options.maxHints > 0 ? options.maxHints : Number.POSITIVE_INFINITY;
 
   for (let index = 0; index < explanationLines.length && hints.length < maxHints; index += 1) {
     const text = truncateInlineText(explanationLines[index]?.trim() ?? '', options.maxTextLength);

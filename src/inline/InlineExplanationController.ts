@@ -41,7 +41,6 @@ export class InlineExplanationController implements vscode.HoverProvider, vscode
     }
 
     const markdown = new vscode.MarkdownString();
-    markdown.appendMarkdown('**Code Explainer**\n\n');
     markdown.appendText(text);
     return new vscode.Hover(markdown, document.lineAt(position.line).range);
   }
@@ -118,7 +117,7 @@ export class InlineExplanationController implements vscode.HoverProvider, vscode
       range: new vscode.Range(line.range.end, line.range.end),
       renderOptions: {
         after: {
-          contentText: `  Code Explainer: ${hint.text}`
+          contentText: `  ${hint.text}`
         }
       }
     };

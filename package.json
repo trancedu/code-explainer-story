@@ -157,9 +157,9 @@
         },
         "codeExplainer.inline.maxHints": {
           "type": "number",
-          "default": 80,
-          "minimum": 1,
-          "description": "Maximum inline explanation hints shown per file."
+          "default": 0,
+          "minimum": 0,
+          "description": "Maximum inline explanation hints shown per file. Set to 0 for no fixed limit."
         },
         "codeExplainer.inline.maxTextLength": {
           "type": "number",
@@ -171,7 +171,7 @@
           "type": "number",
           "default": 100,
           "minimum": 20,
-          "description": "Only show end-of-line inline text on source lines at or below this width; wider lines still use CodeLens and hover."
+          "description": "Only show end-of-line inline text on source lines at or below this width; wider lines still have hover text."
         },
         "codeExplainer.syncLineOffset": {
           "type": "number",

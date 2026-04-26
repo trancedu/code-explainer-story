@@ -51,6 +51,20 @@ test('buildInlineHints limits and truncates inline text', () => {
   assert.equal(hints[0].text, 'A A A A A...');
 });
 
+test('buildInlineHints treats zero maxHints as unlimited', () => {
+  const hints = buildInlineHints(
+    ['First hint.', 'Second hint.'],
+    ['short', 'short'],
+    {
+      maxHints: 0,
+      maxTextLength: 80,
+      maxCodeColumns: 100
+    }
+  );
+
+  assert.equal(hints.length, 2);
+});
+
 test('truncateInlineText normalizes whitespace', () => {
   assert.equal(truncateInlineText('  Explains\n\nthis\tline.  ', 80), 'Explains this line.');
 });
