@@ -196,64 +196,42 @@ function renderWalkthroughExplanation(
   const column = Math.max(48, Math.floor(wrapColumn));
   const fileSummary = sanitizeLine(response.fileSummary);
 
-  if (fileSummary) {
-    pushWrappedParagraph(lines, `File walkthrough: ${fileSummary}`, column);
+  if (fileSummary && !isProgressSummary(fileSummary)) {
+    pushWrappedParagraph(lines, fileSummary, column);
     lines.push('');
   }
 
   for (const chunk of [...response.chunks].sort((a, b) => a.startLine - b.startLine)) {
-    const start = clamp(chunk.startLine, 1, lineCount);
-    const end = clamp(chunk.endLine, 1, lineCount);
-    const summary = sanitizeLine(chunk.summary);
-    const rangePrefix = start === end ? `Line ${start}` : `Lines ${start}-${end}`;
+    const parts: string[] = [];
+    const summary = stripWalkthroughScaffolding(sanitizeLine(chunk.summary));
 
     if (summary && !isBlankOrCommentNarration(summary)) {
-      pushWrappedParagraph(lines, `${rangePrefix}: ${summary}`, column);
-    } else {
-      pushWrappedParagraph(lines, `${rangePrefix}: Walk through this part of the file.`, column);
+      parts.push(summary);
     }
 
     const sortedLineNotes = [...chunk.lines].sort((a, b) => a.line - b.line);
-    const explainedLineNumbers = new Set<number>();
     for (const item of sortedLineNotes) {
       const lineNumber = clamp(item.line, 1, lineCount);
       if (isIgnorableLine(sourceLines, languageId, lineNumber)) {
         continue;
       }
 
-      const text = sanitizeLine(item.text);
+      const text = stripWalkthroughScaffolding(sanitizeLine(item.text));
       if (!text || isBlankOrCommentNarration(text)) {
         continue;
       }
 
-      pushWrappedParagraph(lines, `Line ${lineNumber}: ${text}`, column, '  ');
-      explainedLineNumbers.add(lineNumber);
+      parts.push(text);
     }
 
-    if (sourceLines) {
-      for (let lineNumber = start; lineNumber <= end; lineNumber += 1) {
-        const sourceLine = sourceLines[lineNumber - 1] ?? '';
-        if (
-          explainedLineNumbers.has(lineNumber) ||
-          isIgnorableSourceLine(sourceLine, languageId) ||
-          isTrulyUnimportantSourceLine(sourceLine)
-        ) {
-          continue;
-        }
-
-        pushWrappedParagraph(
-          lines,
-          `Line ${lineNumber}: The code here is \`${sourceSnippet(sourceLine)}\`. Read it as a small continuation of this range; it is included so the walkthrough does not silently skip meaningful code.`,
-          column,
-          '  '
-        );
-      }
+    if (parts.length > 0) {
+      pushWrappedParagraph(lines, parts.join(' '), column);
     }
 
     for (const review of chunk.review) {
       const normalized = normalizeReviewItem(review, lineCount, sourceLines, languageId);
       reviewItems.push(normalized);
-      const reviewText = sanitizeLine(`Review for lines ${normalized.startLine}-${normalized.endLine}: ${normalized.message}${normalized.suggestion ? ` Suggestion: ${normalized.suggestion}` : ''}`);
+      const reviewText = sanitizeLine(`Review note: ${normalized.message}${normalized.suggestion ? ` Suggestion: ${normalized.suggestion}` : ''}`);
       pushWrappedParagraph(lines, reviewText, column, '  ');
     }
 
@@ -286,14 +264,16 @@ function pushWrappedParagraph(lines: string[], text: string, column: number, con
   }
 }
 
-function isTrulyUnimportantSourceLine(line: string): boolean {
-  const trimmed = line.trim();
-  return /^["']{3}$/.test(trimmed) || /^[{}\[\](),;]+$/.test(trimmed) || /^[)\]}]+[),;]*$/.test(trimmed);
+function isProgressSummary(text: string): boolean {
+  return /^Generated \d+ of \d+ chunks/i.test(text);
 }
 
-function sourceSnippet(line: string): string {
-  const trimmed = sanitizeLine(line);
-  return trimmed.length > 90 ? `${trimmed.slice(0, 87)}...` : trimmed;
+function stripWalkthroughScaffolding(text: string): string {
+  return text
+    .replace(/^(?:line|lines)\s+\d+(?:\s*[-–]\s*\d+)?\s*:\s*/i, '')
+    .replace(/^the code here is\s+`[^`]+`\.\s*/i, '')
+    .replace(/\s*Read it as a small continuation of this range; it is included so the walkthrough does not silently skip meaningful code\.?$/i, '')
+    .trim();
 }
 
 function hasAnyLineText(lines: string[], startLine: number, endLine: number): boolean {

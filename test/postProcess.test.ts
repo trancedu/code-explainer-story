@@ -391,7 +391,7 @@ test('renderExplanation keeps story prose in narrative order', () => {
   assert.ok(narrative.indexOf('network call') < narrative.indexOf('Finally'));
 });
 
-test('renderExplanation builds long-form walkthrough output without strict source-line count', () => {
+test('renderExplanation builds smooth walkthrough prose without line-label scaffolding', () => {
   const source = [
     'def choose(value):',
     '    if value > 10:',
@@ -428,13 +428,44 @@ test('renderExplanation builds long-form walkthrough output without strict sourc
   });
   const text = rendered.lines.join('\n');
 
-  assert.ok(rendered.lines.length > 7);
-  assert.match(text, /File walkthrough: A tiny decision helper/);
-  assert.match(text, /Lines 1-7:/);
-  assert.match(text, /Line 2: The if condition asks/);
-  assert.match(text, /Line 4: The else branch/);
-  assert.match(text, /Line 5: The code here is `print\("small"\)`/);
+  assert.match(text, /A tiny decision helper/);
+  assert.match(text, /The helper receives a value/);
+  assert.match(text, /The if condition asks/);
+  assert.match(text, /The else branch/);
+  assert.doesNotMatch(text, /Line \d+:/);
+  assert.doesNotMatch(text, /Lines \d+-\d+:/);
+  assert.doesNotMatch(text, /The code here is/);
+  assert.doesNotMatch(text, /does not silently skip meaningful code/);
   assert.doesNotMatch(text, /comment that should not be explained/);
+});
+
+test('renderExplanation omits streaming progress banner in walkthrough mode', () => {
+  const response: ExplanationResponse = {
+    fileSummary: 'Generated 9 of 54 chunks...',
+    chunks: [
+      {
+        id: 'chunk-1-1',
+        startLine: 1,
+        endLine: 2,
+        summary: 'The file opens by introducing the SDK and explaining what service it talks to.',
+        lines: [
+          { line: 1, text: 'This opening sets context before the executable code begins.' }
+        ],
+        review: []
+      }
+    ]
+  };
+
+  const rendered = renderExplanation(2, response, {
+    sourceText: '"""SDK introduction"""',
+    languageId: 'python',
+    level: 'walkthrough',
+    wrapColumn: 80
+  });
+  const text = rendered.lines.join('\n');
+
+  assert.doesNotMatch(text, /Generated 9 of 54 chunks/);
+  assert.match(text, /The file opens by introducing the SDK/);
 });
 
 test('sanitizeLine collapses all whitespace to one physical line', () => {
