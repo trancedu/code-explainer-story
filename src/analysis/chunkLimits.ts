@@ -11,5 +11,9 @@ export function effectiveMaxChunkLines(level: ExplanationLevel, configuredMaxChu
     return Math.min(safeConfigured, 8);
   }
 
+  if (level === 'walkthrough') {
+    return Math.min(safeConfigured, 5);
+  }
+
   return safeConfigured;
 }

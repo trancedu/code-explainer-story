@@ -2,7 +2,7 @@
   "name": "code-explainer",
   "displayName": "Code Explainer",
   "description": "Side-by-side, line-synced code explanations for VS Code.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "local",
   "private": true,
   "engines": {
@@ -152,7 +152,8 @@
             "concise",
             "medium",
             "detailed",
-            "story"
+            "story",
+            "walkthrough"
           ],
           "default": "medium",
           "description": "How much detail to include in explanations."
@@ -209,7 +210,7 @@
           "type": "number",
           "default": 10,
           "minimum": 5,
-          "description": "Maximum source lines per chunk sent inside the one-file request. Medium mode is capped at 10 lines per chunk."
+          "description": "Maximum source lines per chunk sent inside the one-file request. Medium mode is capped at 10 lines, story at 8, and walkthrough at 5."
         },
         "codeExplainer.cacheExplanations": {
           "type": "boolean",

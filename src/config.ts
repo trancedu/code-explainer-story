@@ -24,7 +24,7 @@ export type CodeExplainerConfig = {
   excludedGlobs: string[];
 };
 
-const levels = new Set<ExplanationLevel>(['concise', 'medium', 'detailed', 'story']);
+const levels = new Set<ExplanationLevel>(['concise', 'medium', 'detailed', 'story', 'walkthrough']);
 
 export function getCodeExplainerConfig(): CodeExplainerConfig {
   const config = vscode.workspace.getConfiguration('codeExplainer');

@@ -1,4 +1,4 @@
-export type ExplanationLevel = 'concise' | 'medium' | 'detailed' | 'story';
+export type ExplanationLevel = 'concise' | 'medium' | 'detailed' | 'story' | 'walkthrough';
 
 export type LLMProvider = 'openai' | 'anthropic';
 

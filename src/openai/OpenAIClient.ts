@@ -49,7 +49,7 @@ export class OpenAIClient {
       model: options.model,
       stream,
       reasoning: {
-        effort: payload.reviewEnabled || payload.explanationLevel === 'story' ? 'medium' : 'low'
+        effort: payload.reviewEnabled || payload.explanationLevel === 'story' || payload.explanationLevel === 'walkthrough' ? 'medium' : 'low'
       },
       input: [
         {

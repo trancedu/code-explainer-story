@@ -39,6 +39,7 @@ type WebviewState = {
   lineHeight: number;
   fontSize: number;
   fontFamily: string;
+  walkthrough: boolean;
   lines: string[];
   fileSummary: string;
   reviewCount: number;
@@ -185,6 +186,7 @@ function toWebviewState(
     lineHeight: metrics.lineHeight,
     fontSize: metrics.fontSize,
     fontFamily: metrics.fontFamily,
+    walkthrough: config.explanationLevel === 'walkthrough',
     lines: stored.rendered.lines,
     fileSummary: stored.rendered.fileSummary,
     reviewCount: stored.rendered.reviewItems.length,
@@ -285,6 +287,24 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       white-space: nowrap;
     }
 
+    .content.walkthrough .gutter {
+      min-width: 0;
+      width: 0;
+      padding: 0;
+      overflow: hidden;
+      color: transparent;
+    }
+
+    .content.walkthrough .text {
+      min-width: 96ch;
+      padding-left: 14px;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+
     .content {
       height: calc(100vh - var(--header-height));
       overflow: auto;
@@ -343,6 +363,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       <option value="medium">medium</option>
       <option value="detailed">detailed</option>
       <option value="story">story</option>
+      <option value="walkthrough">walkthrough</option>
     </select></label>
     <button id="review" class="secondary"></button>
     <button id="refresh">Refresh</button>
@@ -377,7 +398,11 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 
     refresh.addEventListener('click', () => postCommand({ command: 'refresh' }));
     model.addEventListener('click', () => postCommand({ command: 'setModel' }));
-    inline.addEventListener('click', () => postCommand({ command: 'toggleInline' }));
+    inline.addEventListener('click', () => {
+      if (!state.walkthrough) {
+        postCommand({ command: 'toggleInline' });
+      }
+    });
     clear.addEventListener('click', () => postCommand({ command: 'clearCache' }));
     review.addEventListener('click', () => postCommand({ command: 'toggleReview' }));
     minus.addEventListener('click', () => postCommand({ command: 'decreaseOffset' }));
@@ -436,11 +461,13 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       document.documentElement.style.setProperty('--line-height', state.lineHeight + 'px');
       document.documentElement.style.setProperty('--font-size', state.fontSize + 'px');
       document.documentElement.style.setProperty('--font-family', state.fontFamily);
+      content.classList.toggle('walkthrough', Boolean(state.walkthrough));
 
       level.value = state.level;
       model.textContent = 'Model ' + state.model;
       model.title = 'Change model: ' + state.model;
-      inline.textContent = state.inlineEnabled ? 'Inline on' : 'Inline off';
+      inline.disabled = Boolean(state.walkthrough);
+      inline.textContent = state.walkthrough ? 'Inline n/a' : state.inlineEnabled ? 'Inline on' : 'Inline off';
       review.textContent = state.reviewEnabled ? 'Review on' : 'Review off';
       offset.textContent = formatOffset(state.syncOffset);
 

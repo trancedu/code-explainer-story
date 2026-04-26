@@ -16,3 +16,8 @@ test('effectiveMaxChunkLines caps story mode at eight lines', () => {
   assert.equal(effectiveMaxChunkLines('story', 20), 8);
   assert.equal(effectiveMaxChunkLines('story', 6), 6);
 });
+
+test('effectiveMaxChunkLines caps walkthrough mode at five lines', () => {
+  assert.equal(effectiveMaxChunkLines('walkthrough', 20), 5);
+  assert.equal(effectiveMaxChunkLines('walkthrough', 5), 5);
+});

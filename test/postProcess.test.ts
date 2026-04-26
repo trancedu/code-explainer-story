@@ -391,6 +391,52 @@ test('renderExplanation keeps story prose in narrative order', () => {
   assert.ok(narrative.indexOf('network call') < narrative.indexOf('Finally'));
 });
 
+test('renderExplanation builds long-form walkthrough output without strict source-line count', () => {
+  const source = [
+    'def choose(value):',
+    '    if value > 10:',
+    '        return "large"',
+    '    else:',
+    '        print("small")',
+    '    return "done"',
+    '# comment that should not be explained'
+  ].join('\n');
+  const response: ExplanationResponse = {
+    fileSummary: 'A tiny decision helper.',
+    chunks: [
+      {
+        id: 'chunk-1-1',
+        startLine: 1,
+        endLine: 7,
+        summary: 'The helper receives a value, makes a branch decision, and then finishes with a final result.',
+        lines: [
+          { line: 2, text: 'The if condition asks whether value is greater than ten; when true, Python enters the indented block immediately below it.' },
+          { line: 3, text: 'This return exits the function early with the large label, so the later print and final return do not run in that branch.' },
+          { line: 4, text: 'The else branch is the fallback path for values that did not satisfy the greater-than-ten test.' },
+          { line: 6, text: 'After the fallback work, the function returns the done marker to its caller.' }
+        ],
+        review: []
+      }
+    ]
+  };
+
+  const rendered = renderExplanation(7, response, {
+    sourceText: source,
+    languageId: 'python',
+    level: 'walkthrough',
+    wrapColumn: 72
+  });
+  const text = rendered.lines.join('\n');
+
+  assert.ok(rendered.lines.length > 7);
+  assert.match(text, /File walkthrough: A tiny decision helper/);
+  assert.match(text, /Lines 1-7:/);
+  assert.match(text, /Line 2: The if condition asks/);
+  assert.match(text, /Line 4: The else branch/);
+  assert.match(text, /Line 5: The code here is `print\("small"\)`/);
+  assert.doesNotMatch(text, /comment that should not be explained/);
+});
+
 test('sanitizeLine collapses all whitespace to one physical line', () => {
   assert.equal(sanitizeLine(' one\n two\t three  '), 'one two three');
 });

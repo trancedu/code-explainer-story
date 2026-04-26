@@ -334,7 +334,7 @@ async function toggleInlineExplanations(): Promise<void> {
 }
 
 async function chooseExplanationLevel(): Promise<void> {
-  const levels: ExplanationLevel[] = ['concise', 'medium', 'detailed', 'story'];
+  const levels: ExplanationLevel[] = ['concise', 'medium', 'detailed', 'story', 'walkthrough'];
   const selected = await vscode.window.showQuickPick(levels, {
     title: 'Code Explainer: Explanation Level',
     placeHolder: 'Choose how much detail to generate'
@@ -541,7 +541,7 @@ function isExcluded(uri: vscode.Uri, globs: string[]): boolean {
 }
 
 function isExplanationLevel(value: string): value is ExplanationLevel {
-  return value === 'concise' || value === 'medium' || value === 'detailed' || value === 'story';
+  return value === 'concise' || value === 'medium' || value === 'detailed' || value === 'story' || value === 'walkthrough';
 }
 
 function formatOffset(offset: number): string {

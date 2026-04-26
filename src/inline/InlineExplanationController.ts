@@ -21,7 +21,7 @@ export class InlineExplanationController implements vscode.HoverProvider, vscode
 
   provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
     const config = this.getConfig();
-    if (!config.inlineEnabled || document.uri.scheme !== 'file') {
+    if (!config.inlineEnabled || config.explanationLevel === 'walkthrough' || document.uri.scheme !== 'file') {
       return undefined;
     }
 
@@ -65,7 +65,7 @@ export class InlineExplanationController implements vscode.HoverProvider, vscode
   }
 
   private updateEditor(editor: vscode.TextEditor, config: CodeExplainerConfig): void {
-    if (!config.inlineEnabled || editor.document.uri.scheme !== 'file') {
+    if (!config.inlineEnabled || config.explanationLevel === 'walkthrough' || editor.document.uri.scheme !== 'file') {
       editor.setDecorations(this.hintDecorationType, []);
       return;
     }

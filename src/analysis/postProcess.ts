@@ -23,6 +23,17 @@ export function renderExplanation(
   const summaryOnlyMode = level === 'concise';
   const mediumMode = level === 'medium';
   const storyMode = level === 'story';
+  const walkthroughMode = level === 'walkthrough';
+
+  if (walkthroughMode) {
+    return renderWalkthroughExplanation(
+      lineCount,
+      response,
+      sourceLines,
+      languageId,
+      options.wrapColumn ?? 104
+    );
+  }
 
   for (const chunk of response.chunks) {
     const start = clamp(chunk.startLine, 1, lineCount);
@@ -171,6 +182,118 @@ function renderStoryChunk(
 
   const lineIndex = anchor - 1;
   lines[lineIndex] = lines[lineIndex] ? `${lines[lineIndex]}  ${narrative}` : narrative;
+}
+
+function renderWalkthroughExplanation(
+  lineCount: number,
+  response: ExplanationResponse,
+  sourceLines: string[] | undefined,
+  languageId: string,
+  wrapColumn: number
+): RenderedExplanation {
+  const lines: string[] = [];
+  const reviewItems: ReviewItem[] = [];
+  const column = Math.max(48, Math.floor(wrapColumn));
+  const fileSummary = sanitizeLine(response.fileSummary);
+
+  if (fileSummary) {
+    pushWrappedParagraph(lines, `File walkthrough: ${fileSummary}`, column);
+    lines.push('');
+  }
+
+  for (const chunk of [...response.chunks].sort((a, b) => a.startLine - b.startLine)) {
+    const start = clamp(chunk.startLine, 1, lineCount);
+    const end = clamp(chunk.endLine, 1, lineCount);
+    const summary = sanitizeLine(chunk.summary);
+    const rangePrefix = start === end ? `Line ${start}` : `Lines ${start}-${end}`;
+
+    if (summary && !isBlankOrCommentNarration(summary)) {
+      pushWrappedParagraph(lines, `${rangePrefix}: ${summary}`, column);
+    } else {
+      pushWrappedParagraph(lines, `${rangePrefix}: Walk through this part of the file.`, column);
+    }
+
+    const sortedLineNotes = [...chunk.lines].sort((a, b) => a.line - b.line);
+    const explainedLineNumbers = new Set<number>();
+    for (const item of sortedLineNotes) {
+      const lineNumber = clamp(item.line, 1, lineCount);
+      if (isIgnorableLine(sourceLines, languageId, lineNumber)) {
+        continue;
+      }
+
+      const text = sanitizeLine(item.text);
+      if (!text || isBlankOrCommentNarration(text)) {
+        continue;
+      }
+
+      pushWrappedParagraph(lines, `Line ${lineNumber}: ${text}`, column, '  ');
+      explainedLineNumbers.add(lineNumber);
+    }
+
+    if (sourceLines) {
+      for (let lineNumber = start; lineNumber <= end; lineNumber += 1) {
+        const sourceLine = sourceLines[lineNumber - 1] ?? '';
+        if (
+          explainedLineNumbers.has(lineNumber) ||
+          isIgnorableSourceLine(sourceLine, languageId) ||
+          isTrulyUnimportantSourceLine(sourceLine)
+        ) {
+          continue;
+        }
+
+        pushWrappedParagraph(
+          lines,
+          `Line ${lineNumber}: The code here is \`${sourceSnippet(sourceLine)}\`. Read it as a small continuation of this range; it is included so the walkthrough does not silently skip meaningful code.`,
+          column,
+          '  '
+        );
+      }
+    }
+
+    for (const review of chunk.review) {
+      const normalized = normalizeReviewItem(review, lineCount, sourceLines, languageId);
+      reviewItems.push(normalized);
+      const reviewText = sanitizeLine(`Review for lines ${normalized.startLine}-${normalized.endLine}: ${normalized.message}${normalized.suggestion ? ` Suggestion: ${normalized.suggestion}` : ''}`);
+      pushWrappedParagraph(lines, reviewText, column, '  ');
+    }
+
+    if (lines[lines.length - 1] !== '') {
+      lines.push('');
+    }
+  }
+
+  while (lines.length > 0 && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+
+  return {
+    text: lines.join('\n'),
+    lines,
+    reviewItems,
+    fileSummary
+  };
+}
+
+function pushWrappedParagraph(lines: string[], text: string, column: number, continuationIndent = ''): void {
+  const segments = wrapText(text, column);
+  if (segments.length === 0) {
+    return;
+  }
+
+  lines.push(segments[0]);
+  for (const segment of segments.slice(1)) {
+    lines.push(`${continuationIndent}${segment}`);
+  }
+}
+
+function isTrulyUnimportantSourceLine(line: string): boolean {
+  const trimmed = line.trim();
+  return /^["']{3}$/.test(trimmed) || /^[{}\[\](),;]+$/.test(trimmed) || /^[)\]}]+[),;]*$/.test(trimmed);
+}
+
+function sourceSnippet(line: string): string {
+  const trimmed = sanitizeLine(line);
+  return trimmed.length > 90 ? `${trimmed.slice(0, 87)}...` : trimmed;
 }
 
 function hasAnyLineText(lines: string[], startLine: number, endLine: number): boolean {

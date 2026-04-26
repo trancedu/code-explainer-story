@@ -104,7 +104,7 @@ export function snapshotMatches(
     snapshot.generation.model === config.model &&
     snapshot.generation.level === config.explanationLevel &&
     snapshot.generation.reviewEnabled === config.reviewEnabled &&
-    snapshot.explanation.lines.length === lineCount
+    (config.explanationLevel === 'walkthrough' ? snapshot.explanation.lines.length > 0 : snapshot.explanation.lines.length === lineCount)
   );
 }
 
@@ -167,7 +167,7 @@ export function parseSnapshot(value: unknown): ExplanationSnapshot {
     !Number.isInteger(snapshot.source.lineCount) ||
     (snapshot.generation.provider !== undefined && !['openai', 'anthropic'].includes(snapshot.generation.provider)) ||
     typeof snapshot.generation.model !== 'string' ||
-    !['concise', 'medium', 'detailed', 'story'].includes(snapshot.generation.level) ||
+    !['concise', 'medium', 'detailed', 'story', 'walkthrough'].includes(snapshot.generation.level) ||
     typeof snapshot.generation.reviewEnabled !== 'boolean' ||
     typeof snapshot.generation.createdAt !== 'string' ||
     typeof snapshot.explanation.fileSummary !== 'string' ||
