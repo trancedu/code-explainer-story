@@ -65,7 +65,7 @@ export function activate(context: vscode.ExtensionContext): void {
     diagnosticsController,
     statusBarController,
     inlineController,
-    vscode.commands.registerCommand('codeExplainer.explainCurrentFile', () => explainCurrentFile(context)),
+    vscode.commands.registerCommand('codeExplainer.explainCurrentFile', (uri?: vscode.Uri) => explainCurrentFile(context, false, uri)),
     vscode.commands.registerCommand('codeExplainer.refreshExplanation', () => explainCurrentFile(context, true)),
     vscode.commands.registerCommand('codeExplainer.setModel', chooseModel),
     vscode.commands.registerCommand('codeExplainer.setExplanationLevel', chooseExplanationLevel),
@@ -102,8 +102,16 @@ export function deactivate(): void {
   activeExplanationPanel?.dispose();
 }
 
-async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh = false): Promise<void> {
-  const editor = getTargetSourceEditor();
+async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh = false, fileUri?: vscode.Uri): Promise<void> {
+  let editor: vscode.TextEditor | undefined;
+
+  if (fileUri && fileUri.scheme === 'file') {
+    const document = await vscode.workspace.openTextDocument(fileUri);
+    editor = await vscode.window.showTextDocument(document, { preview: false });
+  } else {
+    editor = getTargetSourceEditor();
+  }
+
   if (!editor || editor.document.uri.scheme !== 'file') {
     vscode.window.showWarningMessage('Open a file-backed code editor before running Code Explainer.');
     return;
