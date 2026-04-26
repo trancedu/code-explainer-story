@@ -18,6 +18,8 @@ import { AnthropicClient } from './anthropic/AnthropicClient';
 import { clearApiKey, resolveApiKey, storeApiKey } from './devEnv';
 import { providerDisplayName, providerForModel } from './llm/modelRouting';
 import { InlineExplanationController } from './inline/InlineExplanationController';
+import { buildFollowUpUserPrompt } from './llm/followUpPrompt';
+import { followUpSystemPrompt } from './llm/prompt';
 import { OpenAIClient } from './openai/OpenAIClient';
 import {
   readSnapshot,
@@ -35,6 +37,7 @@ import { StatusBarController } from './ui/StatusBarController';
 import {
   ExplanationWebviewCommand,
   ExplanationWebviewPanel,
+  FollowUpFocus,
   getEditorMetrics
 } from './webview/ExplanationWebviewPanel';
 
@@ -155,7 +158,7 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
       cached.key.reviewEnabled === config.reviewEnabled &&
       cached.key.model === activeModel
     ) {
-      await openExplanation(editor, cached);
+      await openExplanation(context, editor, cached);
       return;
     }
   }
@@ -166,7 +169,7 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
       const stored = store.put(requestKey, document.uri, renderedFromSnapshot(snapshot), config.cacheExplanations);
       diagnosticsController.update(document.uri, stored.rendered.reviewItems);
       inlineController.refresh(document.uri);
-      await openExplanation(editor, stored);
+      await openExplanation(context, editor, stored);
       return;
     }
   }
@@ -201,7 +204,7 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
       const pending = renderPendingExplanation(document.lineCount, `Generating ${chunks.length} explanation chunks with ${activeModel}...`);
       const stored = store.put(requestKey, document.uri, pending, false);
       provider.refresh(stored.explanationUri);
-      await openExplanation(editor, stored);
+      await openExplanation(context, editor, stored);
 
       const streamedChunks = new Map<string, ExplanationChunk>();
       const updateFromChunk = (chunk: ExplanationChunk) => {
@@ -263,6 +266,7 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
 }
 
 async function openExplanation(
+  context: vscode.ExtensionContext,
   sourceEditor: vscode.TextEditor,
   stored: StoredExplanation
 ): Promise<void> {
@@ -274,6 +278,9 @@ async function openExplanation(
       onVisibleLineChanged: (line) => handleWebviewVisibleLineChanged(line),
       onActiveLineChanged: (line) => handleWebviewActiveLineChanged(line),
       onCommand: (message) => handleExplanationPanelCommand(message),
+      onAskFollowUp: (focus) => {
+        void handleAskFollowUp(context, focus);
+      },
       onDispose: () => {
         activeExplanationPanel = undefined;
       }
@@ -709,6 +716,83 @@ async function handleExplanationPanelCommand(message: ExplanationWebviewCommand)
       await resetSyncOffset();
       break;
   }
+}
+
+async function handleAskFollowUp(context: vscode.ExtensionContext, focus: FollowUpFocus): Promise<void> {
+  const panel = activeExplanationPanel;
+  const sourceEditor = findVisibleSourceEditor() ?? activeSourceEditor;
+  if (!panel || !sourceEditor || !panel.matchesSource(sourceEditor.document.uri)) {
+    vscode.window.showWarningMessage('Open an explanation panel before asking a follow-up question.');
+    return;
+  }
+
+  const document = sourceEditor.document;
+  const config = getCodeExplainerConfig();
+  const question = await vscode.window.showInputBox({
+    title: 'Code Explainer: Ask Follow-Up',
+    prompt: formatFollowUpPrompt(focus),
+    placeHolder: 'Ask about this line or chunk...',
+    ignoreFocusOut: true,
+    validateInput: (input) => (input.trim() ? undefined : 'Enter a question.')
+  });
+  if (!question) {
+    return;
+  }
+
+  const trimmedQuestion = question.trim();
+  const apiKey = await ensureApiKey(context, config.provider);
+  if (!apiKey) {
+    return;
+  }
+
+  panel.showFollowUpThinking(trimmedQuestion);
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: 'Code Explainer follow-up',
+      cancellable: true
+    },
+    async (progress, token) => {
+      progress.report({ message: 'Asking model...' });
+      const abortController = new AbortController();
+      token.onCancellationRequested(() => abortController.abort());
+      const activeModel = getActiveModel(config);
+      const client = config.provider === 'anthropic' ? new AnthropicClient() : new OpenAIClient();
+
+      try {
+        const answer = await client.askQuestion(
+          followUpSystemPrompt,
+          buildFollowUpUserPrompt({
+            fileName: config.includeFullPath ? document.uri.fsPath : path.basename(document.uri.fsPath),
+            languageId: document.languageId,
+            totalLines: document.lineCount,
+            focusLine: focus.line,
+            focusEndLine: focus.endLine,
+            question: trimmedQuestion,
+            sourceText: document.getText()
+          }),
+          {
+            apiKey,
+            model: activeModel,
+            signal: abortController.signal
+          }
+        );
+        panel.showFollowUpAnswer(answer);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        panel.showFollowUpError(`Code Explainer follow-up failed: ${message}`);
+        vscode.window.showErrorMessage(`Code Explainer follow-up failed: ${message}`);
+      }
+    }
+  );
+}
+
+function formatFollowUpPrompt(focus: FollowUpFocus): string {
+  if (typeof focus.endLine === 'number' && focus.endLine > focus.line) {
+    return `Ask a question about source lines ${focus.line}-${focus.endLine}.`;
+  }
+
+  return `Ask a question about source line ${focus.line}.`;
 }
 
 function refreshSettingsDisplay(): void {

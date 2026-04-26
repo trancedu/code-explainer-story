@@ -41,6 +41,42 @@ export class AnthropicClient {
     return validateExplanationResponse(parsed);
   }
 
+  async askQuestion(
+    systemText: string,
+    userText: string,
+    options: AnthropicGenerateOptions
+  ): Promise<string> {
+    const response = await this.fetchImpl('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: options.signal,
+      headers: {
+        'x-api-key': options.apiKey,
+        'anthropic-version': anthropicVersion,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: options.model,
+        max_tokens: 2048,
+        stream: false,
+        system: systemText,
+        messages: [
+          {
+            role: 'user',
+            content: userText
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const rawText = await response.text();
+      throw new Error(`Claude request failed (${response.status} ${response.statusText}): ${redact(rawText, options.apiKey)}`);
+    }
+
+    const raw = parseJson(await response.text(), 'Claude API response was not valid JSON.');
+    return extractOutputText(raw);
+  }
+
   private async request(
     payload: FilePayload,
     options: AnthropicGenerateOptions,

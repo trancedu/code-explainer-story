@@ -15,10 +15,16 @@ export type ExplanationWebviewCommand =
   | { command: 'decreaseOffset' }
   | { command: 'resetOffset' };
 
+export type FollowUpFocus = {
+  line: number;
+  endLine?: number;
+};
+
 export type ExplanationWebviewCallbacks = {
   onVisibleLineChanged(line: number): void;
   onActiveLineChanged(line: number): void;
   onCommand(message: ExplanationWebviewCommand): void;
+  onAskFollowUp(focus: FollowUpFocus): void;
   onDispose(): void;
 };
 
@@ -128,6 +134,27 @@ export class ExplanationWebviewPanel implements vscode.Disposable {
     });
   }
 
+  showFollowUpThinking(question: string): void {
+    this.panel.webview.postMessage({
+      type: 'followUpThinking',
+      question
+    });
+  }
+
+  showFollowUpAnswer(answer: string): void {
+    this.panel.webview.postMessage({
+      type: 'followUpAnswer',
+      answer
+    });
+  }
+
+  showFollowUpError(message: string): void {
+    this.panel.webview.postMessage({
+      type: 'followUpError',
+      message
+    });
+  }
+
   matchesSource(uri: vscode.Uri): boolean {
     return this.sourceUri.toString() === uri.toString();
   }
@@ -157,6 +184,15 @@ export class ExplanationWebviewPanel implements vscode.Disposable {
 
     if (message.type === 'activeLineChanged' && typeof message.line === 'number') {
       this.callbacks.onActiveLineChanged(message.line);
+      return;
+    }
+
+    if (message.type === 'askFollowUp' && typeof message.line === 'number') {
+      const focus: FollowUpFocus = { line: message.line };
+      if (typeof message.endLine === 'number') {
+        focus.endLine = message.endLine;
+      }
+      this.callbacks.onAskFollowUp(focus);
       return;
     }
 
@@ -376,6 +412,82 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       min-width: 80ch;
       padding-right: 32px;
     }
+
+    .follow-up-menu {
+      position: fixed;
+      z-index: 20;
+      display: none;
+      min-width: 188px;
+      padding: 4px;
+      border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border));
+      border-radius: 4px;
+      color: var(--vscode-menu-foreground, var(--vscode-foreground));
+      background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
+      box-shadow: 0 4px 14px rgb(0 0 0 / 28%);
+    }
+
+    .follow-up-menu.open {
+      display: block;
+    }
+
+    .follow-up-menu button {
+      width: 100%;
+      height: 26px;
+      border: 0;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+    }
+
+    .follow-up-menu button:hover {
+      color: var(--vscode-menu-selectionForeground, var(--vscode-list-activeSelectionForeground));
+      background: var(--vscode-menu-selectionBackground, var(--vscode-list-activeSelectionBackground));
+    }
+
+    .follow-up-card {
+      box-sizing: border-box;
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 15;
+      display: none;
+      width: min(560px, calc(100vw - 32px));
+      max-height: min(440px, calc(100vh - var(--header-height) - 32px));
+      border: 1px solid var(--vscode-editorWidget-border);
+      border-radius: 6px;
+      color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+      background: var(--vscode-editorWidget-background);
+      box-shadow: 0 8px 24px rgb(0 0 0 / 32%);
+      overflow: hidden;
+    }
+
+    .follow-up-card.open {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .follow-up-card header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--vscode-editorWidget-border);
+      font-weight: 700;
+    }
+
+    .follow-up-card .question {
+      padding: 8px 10px 0;
+      color: var(--vscode-descriptionForeground);
+      white-space: normal;
+    }
+
+    .follow-up-card .answer {
+      padding: 10px;
+      overflow: auto;
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
   </style>
 </head>
 <body>
@@ -400,6 +512,17 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
   <div class="content" id="content">
     <div class="lines" id="lines"></div>
   </div>
+  <div class="follow-up-menu" id="followUpMenu">
+    <button id="askFollowUp" type="button">Ask follow-up question</button>
+  </div>
+  <section class="follow-up-card" id="followUpCard" aria-live="polite">
+    <header>
+      <span>Follow-up answer</span>
+      <button id="closeFollowUp" class="secondary" type="button">Close</button>
+    </header>
+    <div class="question" id="followUpQuestion"></div>
+    <div class="answer" id="followUpAnswer"></div>
+  </section>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     let state = ${serializedState};
@@ -420,6 +543,13 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
     const offset = document.getElementById('offset');
     const content = document.getElementById('content');
     const lines = document.getElementById('lines');
+    const followUpMenu = document.getElementById('followUpMenu');
+    const askFollowUp = document.getElementById('askFollowUp');
+    const followUpCard = document.getElementById('followUpCard');
+    const closeFollowUp = document.getElementById('closeFollowUp');
+    const followUpQuestion = document.getElementById('followUpQuestion');
+    const followUpAnswer = document.getElementById('followUpAnswer');
+    let followUpFocus = undefined;
 
     refresh.addEventListener('click', () => postCommand({ command: 'refresh' }));
     model.addEventListener('click', () => postCommand({ command: 'setModel' }));
@@ -434,6 +564,21 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
     plus.addEventListener('click', () => postCommand({ command: 'increaseOffset' }));
     reset.addEventListener('click', () => postCommand({ command: 'resetOffset' }));
     level.addEventListener('change', () => postCommand({ command: 'setLevel', level: level.value }));
+    askFollowUp.addEventListener('click', () => {
+      if (followUpFocus) {
+        vscode.postMessage({ type: 'askFollowUp', line: followUpFocus.line, endLine: followUpFocus.endLine });
+      }
+      closeFollowUpMenu();
+    });
+    closeFollowUp.addEventListener('click', () => {
+      followUpCard.classList.remove('open');
+    });
+    document.addEventListener('click', (event) => {
+      if (!followUpMenu.contains(event.target)) {
+        closeFollowUpMenu();
+      }
+    });
+    window.addEventListener('blur', closeFollowUpMenu);
 
     content.addEventListener('scroll', () => {
       if (state.walkthrough) {
@@ -485,6 +630,23 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
           return;
         }
         setActiveLine(message.line);
+        return;
+      }
+
+      if (message.type === 'followUpThinking') {
+        showFollowUpCard(message.question, 'Thinking...');
+        return;
+      }
+
+      if (message.type === 'followUpAnswer') {
+        followUpAnswer.textContent = message.answer || '';
+        followUpCard.classList.add('open');
+        return;
+      }
+
+      if (message.type === 'followUpError') {
+        followUpAnswer.textContent = message.message || 'Follow-up request failed.';
+        followUpCard.classList.add('open');
       }
     });
 
@@ -540,6 +702,10 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 
           setActiveLine(index + 1);
           vscode.postMessage({ type: 'activeLineChanged', line: index + 1 });
+        });
+        row.addEventListener('contextmenu', (event) => {
+          event.preventDefault();
+          openFollowUpMenu(event.clientX, event.clientY, focusForRow(index));
         });
         fragment.append(row);
       });
@@ -616,6 +782,39 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
         top: firstTopOffset - headroom,
         behavior: 'smooth'
       });
+    }
+
+    function focusForRow(index) {
+      if (state.walkthrough) {
+        const chunk = state.walkthroughChunks?.find((c) =>
+          index >= c.paragraphStart && index <= c.paragraphEnd
+        );
+        if (chunk) {
+          return { line: chunk.startLine, endLine: chunk.endLine };
+        }
+      }
+
+      return { line: index + 1 };
+    }
+
+    function openFollowUpMenu(clientX, clientY, focus) {
+      followUpFocus = focus;
+      followUpMenu.classList.add('open');
+      const rect = followUpMenu.getBoundingClientRect();
+      const left = Math.min(clientX, window.innerWidth - rect.width - 8);
+      const top = Math.min(clientY, window.innerHeight - rect.height - 8);
+      followUpMenu.style.left = Math.max(8, left) + 'px';
+      followUpMenu.style.top = Math.max(8, top) + 'px';
+    }
+
+    function closeFollowUpMenu() {
+      followUpMenu.classList.remove('open');
+    }
+
+    function showFollowUpCard(question, answer) {
+      followUpQuestion.textContent = question ? 'Q: ' + question : '';
+      followUpAnswer.textContent = answer;
+      followUpCard.classList.add('open');
     }
 
     function scrollTopToLine(scrollTop, lineHeight, lineCount) {

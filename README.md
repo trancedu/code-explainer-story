@@ -24,6 +24,8 @@ Code Explainer opens a source file beside a generated English explanation. The s
 
 You can also right-click any file in the Explorer side bar and choose `Code Explainer: Explain Current File` to run the explainer without opening that file in the editor first.
 
+In the explanation panel, right-click a row and choose `Ask follow-up question` to ask about that source line. In walkthrough mode, right-clicking a paragraph asks about the whole mapped source chunk. The answer appears in a floating card over the explanation panel without changing the line layout or saved explanation.
+
 When an explanation panel is open, its top header always shows the current model, inline mode, explanation level, review mode, sync offset, refresh action, and cache action. The status bar also shows the current level and model.
 
 Inline explanations are optional. Turn them on with `Code Explainer: Toggle Inline Explanations` or the `Inline` button in the explanation header. Inline mode shows hover text on nearby code and short end-of-line hints when the source line is not too wide. The right-side panel remains the complete collected view.
