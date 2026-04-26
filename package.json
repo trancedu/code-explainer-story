@@ -19,25 +19,6 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:codeExplainer.explainCurrentFile",
-    "onCommand:codeExplainer.refreshExplanation",
-    "onCommand:codeExplainer.setModel",
-    "onCommand:codeExplainer.setExplanationLevel",
-    "onCommand:codeExplainer.toggleInlineExplanations",
-    "onCommand:codeExplainer.toggleReviewMode",
-    "onCommand:codeExplainer.clearCache",
-    "onCommand:codeExplainer.saveCurrentExplanation",
-    "onCommand:codeExplainer.explainFolder",
-    "onCommand:codeExplainer.explainWorkspace",
-    "onCommand:codeExplainer.increaseSyncOffset",
-    "onCommand:codeExplainer.decreaseSyncOffset",
-    "onCommand:codeExplainer.resetSyncOffset",
-    "onCommand:codeExplainer.setOpenAIKey",
-    "onCommand:codeExplainer.clearOpenAIKey",
-    "onCommand:codeExplainer.setAnthropicKey",
-    "onCommand:codeExplainer.clearAnthropicKey"
-  ],
   "main": "./out/src/extension.js",
   "scripts": {
     "compile": "tsc -p .",
