@@ -1,4 +1,4 @@
-import { ExplanationLevel, ExplanationResponse, RenderedExplanation, ReviewItem } from '../types';
+import { ExplanationLevel, ExplanationResponse, RenderedExplanation, ReviewItem, WalkthroughChunkRange } from '../types';
 import { firstMeaningfulLineInRange, isIgnorableSourceLine, splitSourceLines } from './sourceLines';
 
 export type RenderExplanationOptions = {
@@ -193,6 +193,7 @@ function renderWalkthroughExplanation(
 ): RenderedExplanation {
   const lines: string[] = [];
   const reviewItems: ReviewItem[] = [];
+  const walkthroughChunks: WalkthroughChunkRange[] = [];
   const column = Math.max(48, Math.floor(wrapColumn));
   const fileSummary = sanitizeLine(response.fileSummary);
 
@@ -201,7 +202,16 @@ function renderWalkthroughExplanation(
     lines.push('');
   }
 
+  let paragraphCount = 0;
   for (const chunk of [...response.chunks].sort((a, b) => a.startLine - b.startLine)) {
+    const start = clamp(chunk.startLine, 1, lineCount);
+    const end = clamp(chunk.endLine, 1, lineCount);
+    if (isWalkthroughDocumentationOnlyRange(sourceLines, languageId, start, end)) {
+      continue;
+    }
+
+    const paragraphStart = lines.length;
+
     const parts: string[] = [];
     const summary = stripWalkthroughScaffolding(sanitizeLine(chunk.summary));
 
@@ -212,7 +222,7 @@ function renderWalkthroughExplanation(
     const sortedLineNotes = [...chunk.lines].sort((a, b) => a.line - b.line);
     for (const item of sortedLineNotes) {
       const lineNumber = clamp(item.line, 1, lineCount);
-      if (isIgnorableLine(sourceLines, languageId, lineNumber)) {
+      if (isWalkthroughIgnorableLine(sourceLines, languageId, lineNumber)) {
         continue;
       }
 
@@ -225,7 +235,8 @@ function renderWalkthroughExplanation(
     }
 
     if (parts.length > 0) {
-      pushWrappedParagraph(lines, parts.join(' '), column);
+      pushWrappedParagraph(lines, withNarrativeTransition(parts.join(' '), paragraphCount), column);
+      paragraphCount += 1;
     }
 
     for (const review of chunk.review) {
@@ -233,6 +244,11 @@ function renderWalkthroughExplanation(
       reviewItems.push(normalized);
       const reviewText = sanitizeLine(`Review note: ${normalized.message}${normalized.suggestion ? ` Suggestion: ${normalized.suggestion}` : ''}`);
       pushWrappedParagraph(lines, reviewText, column, '  ');
+    }
+
+    const paragraphEnd = lines.length - 1;
+    if (paragraphEnd >= paragraphStart) {
+      walkthroughChunks.push({ startLine: start, endLine: end, paragraphStart, paragraphEnd });
     }
 
     if (lines[lines.length - 1] !== '') {
@@ -248,7 +264,8 @@ function renderWalkthroughExplanation(
     text: lines.join('\n'),
     lines,
     reviewItems,
-    fileSummary
+    fileSummary,
+    walkthroughChunks
   };
 }
 
@@ -268,12 +285,180 @@ function isProgressSummary(text: string): boolean {
   return /^Generated \d+ of \d+ chunks/i.test(text);
 }
 
+function withNarrativeTransition(text: string, paragraphIndex: number): string {
+  const sanitized = sanitizeLine(text);
+  if (paragraphIndex === 0 || hasTransitionStart(sanitized)) {
+    return sanitized;
+  }
+
+  const transitions = [
+    'With that foundation in place',
+    'From there',
+    'Next',
+    'Once the setup is ready',
+    'The walkthrough then moves into',
+    'At this point',
+    'Now the code turns to'
+  ];
+  const transition = transitions[(paragraphIndex - 1) % transitions.length];
+  return `${transition}, ${decapitalizeFirstWord(sanitized)}`;
+}
+
+function hasTransitionStart(text: string): boolean {
+  return /^(then|next|from there|once\b|after\b|with\b|at this point|now\b|finally|the story then|the walkthrough then)\b/i.test(text);
+}
+
+function decapitalizeFirstWord(text: string): string {
+  return text.replace(/^([A-Z])([a-z])/, (_match, first: string, second: string) => `${first.toLowerCase()}${second}`);
+}
+
 function stripWalkthroughScaffolding(text: string): string {
   return text
     .replace(/^(?:line|lines)\s+\d+(?:\s*[-–]\s*\d+)?\s*:\s*/i, '')
     .replace(/^the code here is\s+`[^`]+`\.\s*/i, '')
     .replace(/\s*Read it as a small continuation of this range; it is included so the walkthrough does not silently skip meaningful code\.?$/i, '')
     .trim();
+}
+
+function isWalkthroughIgnorableLine(sourceLines: string[] | undefined, languageId: string, lineNumber: number): boolean {
+  if (!sourceLines) {
+    return false;
+  }
+
+  return isIgnorableSourceLine(sourceLines[lineNumber - 1] ?? '', languageId) || isDocumentationLine(sourceLines, languageId, lineNumber);
+}
+
+function isWalkthroughDocumentationOnlyRange(
+  sourceLines: string[] | undefined,
+  languageId: string,
+  startLine: number,
+  endLine: number
+): boolean {
+  if (!sourceLines) {
+    return false;
+  }
+
+  let sawContent = false;
+  for (let lineNumber = startLine; lineNumber <= endLine; lineNumber += 1) {
+    const line = sourceLines[lineNumber - 1] ?? '';
+    if (!line.trim()) {
+      continue;
+    }
+    sawContent = true;
+    if (!isIgnorableSourceLine(line, languageId) && !isDocumentationLine(sourceLines, languageId, lineNumber)) {
+      return false;
+    }
+  }
+
+  return sawContent;
+}
+
+function isDocumentationLine(sourceLines: string[], languageId: string, lineNumber: number): boolean {
+  if (languageId === 'python') {
+    return isPythonTripleQuotedLine(sourceLines, lineNumber);
+  }
+
+  if (['typescript', 'typescriptreact', 'javascript', 'javascriptreact'].includes(languageId)) {
+    return isJsBlockCommentLine(sourceLines, lineNumber);
+  }
+
+  return false;
+}
+
+function isPythonTripleQuotedLine(sourceLines: string[], lineNumber: number): boolean {
+  let inTripleQuote: '"""' | "'''" | undefined;
+
+  for (let index = 0; index < sourceLines.length; index += 1) {
+    const line = sourceLines[index] ?? '';
+    const currentLineNumber = index + 1;
+    const lineStartsInsideDoc = inTripleQuote !== undefined;
+    const quote = inTripleQuote ?? (isPotentialPythonDocstringStart(sourceLines, index) ? firstTripleQuote(line) : undefined);
+
+    if (!quote) {
+      if (currentLineNumber === lineNumber) {
+        return false;
+      }
+      continue;
+    }
+
+    const occurrences = countOccurrences(line, quote);
+    const lineIsDoc = lineStartsInsideDoc || occurrences > 0;
+    if (currentLineNumber === lineNumber) {
+      return lineIsDoc;
+    }
+
+    if (occurrences % 2 === 1) {
+      inTripleQuote = lineStartsInsideDoc ? undefined : quote;
+    }
+  }
+
+  return false;
+}
+
+function isPotentialPythonDocstringStart(sourceLines: string[], index: number): boolean {
+  const trimmed = sourceLines[index]?.trim() ?? '';
+  if (!/^[rRuUfFbB]*("""|''')/.test(trimmed)) {
+    return false;
+  }
+
+  const previous = previousMeaningfulPythonLine(sourceLines, index);
+  return previous === undefined || previous.endsWith(':');
+}
+
+function previousMeaningfulPythonLine(sourceLines: string[], beforeIndex: number): string | undefined {
+  for (let index = beforeIndex - 1; index >= 0; index -= 1) {
+    const trimmed = sourceLines[index]?.trim() ?? '';
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue;
+    }
+    return trimmed;
+  }
+
+  return undefined;
+}
+
+function firstTripleQuote(line: string): '"""' | "'''" | undefined {
+  const doubleIndex = line.indexOf('"""');
+  const singleIndex = line.indexOf("'''");
+  if (doubleIndex === -1 && singleIndex === -1) {
+    return undefined;
+  }
+  if (singleIndex === -1 || (doubleIndex !== -1 && doubleIndex < singleIndex)) {
+    return '"""';
+  }
+  return "'''";
+}
+
+function countOccurrences(line: string, pattern: string): number {
+  let count = 0;
+  let index = line.indexOf(pattern);
+  while (index !== -1) {
+    count += 1;
+    index = line.indexOf(pattern, index + pattern.length);
+  }
+  return count;
+}
+
+function isJsBlockCommentLine(sourceLines: string[], lineNumber: number): boolean {
+  let inBlockComment = false;
+  for (let index = 0; index < sourceLines.length; index += 1) {
+    const line = sourceLines[index] ?? '';
+    const currentLineNumber = index + 1;
+    const startsHere = line.includes('/*');
+    const lineIsDoc = inBlockComment || startsHere;
+    if (currentLineNumber === lineNumber) {
+      return lineIsDoc;
+    }
+
+    if (startsHere && !line.includes('*/')) {
+      inBlockComment = true;
+    }
+    if (inBlockComment && line.includes('*/')) {
+      inBlockComment = false;
+    }
+  }
+
+  return false;
 }
 
 function hasAnyLineText(lines: string[], startLine: number, endLine: number): boolean {

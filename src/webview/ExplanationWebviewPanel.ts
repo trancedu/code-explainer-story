@@ -28,6 +28,13 @@ export type EditorMetrics = {
   lineHeight: number;
 };
 
+type WalkthroughChunkRange = {
+  startLine: number;
+  endLine: number;
+  paragraphStart: number;
+  paragraphEnd: number;
+};
+
 type WebviewState = {
   fileName: string;
   model: string;
@@ -44,6 +51,7 @@ type WebviewState = {
   fileSummary: string;
   reviewCount: number;
   activeLine: number | undefined;
+  walkthroughChunks: WalkthroughChunkRange[] | undefined;
 };
 
 export class ExplanationWebviewPanel implements vscode.Disposable {
@@ -190,7 +198,8 @@ function toWebviewState(
     lines: stored.rendered.lines,
     fileSummary: stored.rendered.fileSummary,
     reviewCount: stored.rendered.reviewItems.length,
-    activeLine: undefined
+    activeLine: undefined,
+    walkthroughChunks: stored.rendered.walkthroughChunks
   };
 }
 
@@ -300,6 +309,17 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       padding-left: 14px;
     }
 
+    .content.walkthrough .line.active {
+      background: transparent;
+      outline: none;
+      box-shadow: none;
+    }
+
+    .content.walkthrough .line.chunk-active {
+      background: color-mix(in srgb, var(--vscode-editor-selectionBackground) 50%, transparent);
+      box-shadow: inset 3px 0 0 var(--vscode-focusBorder);
+    }
+
     button:disabled {
       opacity: 0.55;
       cursor: default;
@@ -382,6 +402,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
     let measuredLineHeight = state.lineHeight;
     let scrollTimer = undefined;
     let suppressScrollUntil = 0;
+    let walkthroughActiveLine = undefined;
 
     const model = document.getElementById('model');
     const inline = document.getElementById('inline');
@@ -411,6 +432,10 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
     level.addEventListener('change', () => postCommand({ command: 'setLevel', level: level.value }));
 
     content.addEventListener('scroll', () => {
+      if (state.walkthrough) {
+        return;
+      }
+
       if (Date.now() < suppressScrollUntil) {
         return;
       }
@@ -438,6 +463,9 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       }
 
       if (message.type === 'revealLine') {
+        if (state.walkthrough) {
+          return;
+        }
         suppressScrollUntil = Date.now() + 250;
         content.scrollTop =
           typeof message.scrollTop === 'number'
@@ -448,6 +476,10 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       }
 
       if (message.type === 'setActiveLine') {
+        if (state.walkthrough) {
+          setWalkthroughActiveChunk(message.line, true);
+          return;
+        }
         setActiveLine(message.line);
       }
     });
@@ -476,7 +508,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
         const row = document.createElement('div');
         row.className = 'line';
         row.dataset.line = String(index + 1);
-        if (state.activeLine === index + 1) {
+        if (!state.walkthrough && state.activeLine === index + 1) {
           row.classList.add('active');
         }
 
@@ -490,6 +522,10 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 
         row.append(gutter, text);
         row.addEventListener('click', () => {
+          if (state.walkthrough) {
+            return;
+          }
+
           setActiveLine(index + 1);
           vscode.postMessage({ type: 'activeLineChanged', line: index + 1 });
         });
@@ -498,6 +534,10 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 
       lines.replaceChildren(fragment);
       measuredLineHeight = document.querySelector('.line')?.getBoundingClientRect().height || state.lineHeight;
+
+      if (state.walkthrough) {
+        setWalkthroughActiveChunk(walkthroughActiveLine, false);
+      }
     }
 
     function formatOffset(value) {
@@ -505,7 +545,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
     }
 
     function setActiveLine(line) {
-      state.activeLine = typeof line === 'number' ? line : undefined;
+      state.activeLine = !state.walkthrough && typeof line === 'number' ? line : undefined;
       document.querySelectorAll('.line.active').forEach((node) => node.classList.remove('active'));
       if (state.activeLine === undefined) {
         return;
@@ -513,6 +553,29 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
 
       const row = document.querySelector('.line[data-line="' + state.activeLine + '"]');
       row?.classList.add('active');
+    }
+
+    function setWalkthroughActiveChunk(sourceLine, shouldScroll) {
+      walkthroughActiveLine = sourceLine;
+      document.querySelectorAll('.line.chunk-active').forEach((node) => node.classList.remove('chunk-active'));
+      if (!state.walkthroughChunks || typeof sourceLine !== 'number') {
+        return;
+      }
+      const chunk = state.walkthroughChunks.find((c) => sourceLine >= c.startLine && sourceLine <= c.endLine);
+      if (!chunk) {
+        return;
+      }
+      let firstNode = null;
+      for (let i = chunk.paragraphStart; i <= chunk.paragraphEnd; i++) {
+        const row = document.querySelector('.line[data-line="' + (i + 1) + '"]');
+        if (row) {
+          row.classList.add('chunk-active');
+          if (!firstNode) { firstNode = row; }
+        }
+      }
+      if (shouldScroll && firstNode) {
+        firstNode.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     }
 
     function scrollTopToLine(scrollTop, lineHeight, lineCount) {

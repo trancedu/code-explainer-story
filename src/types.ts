@@ -59,11 +59,19 @@ export type ExplanationResponse = {
   chunks: ExplanationChunk[];
 };
 
+export type WalkthroughChunkRange = {
+  startLine: number;
+  endLine: number;
+  paragraphStart: number;
+  paragraphEnd: number;
+};
+
 export type RenderedExplanation = {
   text: string;
   lines: string[];
   reviewItems: ReviewItem[];
   fileSummary: string;
+  walkthroughChunks?: WalkthroughChunkRange[];
 };
 
 export type ExplanationRequestKey = {

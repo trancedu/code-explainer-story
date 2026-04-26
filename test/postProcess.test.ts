@@ -457,7 +457,7 @@ test('renderExplanation omits streaming progress banner in walkthrough mode', ()
   };
 
   const rendered = renderExplanation(2, response, {
-    sourceText: '"""SDK introduction"""',
+    sourceText: 'import json\nvalue = json.dumps({})',
     languageId: 'python',
     level: 'walkthrough',
     wrapColumn: 80
@@ -466,6 +466,163 @@ test('renderExplanation omits streaming progress banner in walkthrough mode', ()
 
   assert.doesNotMatch(text, /Generated 9 of 54 chunks/);
   assert.match(text, /The file opens by introducing the SDK/);
+});
+
+test('renderExplanation skips standalone docstring chunks and adds gentle walkthrough transitions', () => {
+  const source = [
+    '"""',
+    'Example SDK',
+    '"""',
+    'import json',
+    'def choose(value):',
+    '    if value:',
+    '        return json.dumps(value)'
+  ].join('\n');
+  const response: ExplanationResponse = {
+    fileSummary: 'This helper prepares a tiny JSON-producing flow.',
+    chunks: [
+      {
+        id: 'chunk-1-1',
+        startLine: 1,
+        endLine: 3,
+        summary: 'The module docstring announces the SDK name.',
+        lines: [
+          { line: 2, text: 'The documentation names the SDK.' }
+        ],
+        review: []
+      },
+      {
+        id: 'chunk-4-4',
+        startLine: 4,
+        endLine: 4,
+        summary: 'The import brings in JSON serialization so Python values can become text for storage or transport.',
+        lines: [],
+        review: []
+      },
+      {
+        id: 'chunk-5-7',
+        startLine: 5,
+        endLine: 7,
+        summary: 'The helper receives a value and only serializes it when the value passes Python truthiness.',
+        lines: [
+          { line: 6, text: 'The condition asks whether the value is present enough to enter the branch.' },
+          { line: 7, text: 'The return hands the serialized JSON string back to the caller.' }
+        ],
+        review: []
+      }
+    ]
+  };
+
+  const rendered = renderExplanation(7, response, {
+    sourceText: source,
+    languageId: 'python',
+    level: 'walkthrough',
+    wrapColumn: 120
+  });
+  const text = rendered.lines.join('\n');
+
+  assert.doesNotMatch(text, /docstring/i);
+  assert.doesNotMatch(text, /SDK name/);
+  assert.match(text, /The import brings in JSON serialization/);
+  assert.match(text, /With that foundation in place, the helper receives a value/);
+  assert.match(text, /truthiness/);
+});
+
+test('renderExplanation populates walkthroughChunks with correct source-to-paragraph mappings', () => {
+  const source = [
+    'import json',
+    'def choose(value):',
+    '    if value:',
+    '        return json.dumps(value)'
+  ].join('\n');
+  const response: ExplanationResponse = {
+    fileSummary: 'A serialization helper.',
+    chunks: [
+      {
+        id: 'chunk-1-1',
+        startLine: 1,
+        endLine: 1,
+        summary: 'The import brings in JSON serialization.',
+        lines: [],
+        review: []
+      },
+      {
+        id: 'chunk-2-4',
+        startLine: 2,
+        endLine: 4,
+        summary: 'The helper receives a value and serializes it when truthy.',
+        lines: [
+          { line: 3, text: 'The condition checks Python truthiness.' },
+          { line: 4, text: 'The return hands the JSON string back to the caller.' }
+        ],
+        review: []
+      }
+    ]
+  };
+
+  const rendered = renderExplanation(4, response, {
+    sourceText: source,
+    languageId: 'python',
+    level: 'walkthrough',
+    wrapColumn: 120
+  });
+
+  assert.ok(rendered.walkthroughChunks, 'walkthroughChunks should be defined');
+  assert.equal(rendered.walkthroughChunks.length, 2);
+
+  const [first, second] = rendered.walkthroughChunks;
+
+  assert.equal(first.startLine, 1);
+  assert.equal(first.endLine, 1);
+  assert.ok(first.paragraphEnd >= first.paragraphStart, 'first chunk paragraph should span at least one line');
+  assert.match(rendered.lines.slice(first.paragraphStart, first.paragraphEnd + 1).join(' '), /JSON serialization/);
+
+  assert.equal(second.startLine, 2);
+  assert.equal(second.endLine, 4);
+  assert.ok(second.paragraphEnd >= second.paragraphStart, 'second chunk paragraph should span at least one line');
+  assert.ok(second.paragraphStart > first.paragraphEnd, 'second chunk should start after first chunk ends');
+  assert.match(rendered.lines.slice(second.paragraphStart, second.paragraphEnd + 1).join(' '), /serializes it when truthy/);
+});
+
+test('renderExplanation excludes skipped docstring chunks from walkthroughChunks', () => {
+  const source = [
+    '"""',
+    'Module doc',
+    '"""',
+    'import json'
+  ].join('\n');
+  const response: ExplanationResponse = {
+    fileSummary: '',
+    chunks: [
+      {
+        id: 'chunk-1-3',
+        startLine: 1,
+        endLine: 3,
+        summary: 'The module docstring.',
+        lines: [{ line: 2, text: 'Names the module.' }],
+        review: []
+      },
+      {
+        id: 'chunk-4-4',
+        startLine: 4,
+        endLine: 4,
+        summary: 'The import loads JSON support.',
+        lines: [],
+        review: []
+      }
+    ]
+  };
+
+  const rendered = renderExplanation(4, response, {
+    sourceText: source,
+    languageId: 'python',
+    level: 'walkthrough',
+    wrapColumn: 80
+  });
+
+  assert.ok(rendered.walkthroughChunks, 'walkthroughChunks should be defined');
+  assert.equal(rendered.walkthroughChunks.length, 1, 'docstring-only chunk should be excluded');
+  assert.equal(rendered.walkthroughChunks[0].startLine, 4);
 });
 
 test('sanitizeLine collapses all whitespace to one physical line', () => {

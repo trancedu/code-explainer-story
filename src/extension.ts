@@ -579,6 +579,7 @@ function findVisibleSourceEditor(): vscode.TextEditor | undefined {
 }
 
 function handleSourceVisibleRangesChanged(event: vscode.TextEditorVisibleRangesChangeEvent): void {
+  const config = getCodeExplainerConfig();
   if (
     !activeExplanationPanel ||
     !activeExplanationPanel.matchesSource(event.textEditor.document.uri) ||
@@ -596,11 +597,18 @@ function handleSourceVisibleRangesChanged(event: vscode.TextEditorVisibleRangesC
     clearTimeout(sourceScrollDebounce);
   }
 
+  if (config.explanationLevel === 'walkthrough') {
+    sourceScrollDebounce = setTimeout(() => {
+      activeExplanationPanel?.setActiveLine(topLine + 1);
+    }, 50);
+    return;
+  }
+
   sourceScrollDebounce = setTimeout(() => {
     const targetLine = mapSyncTargetLine(
       topLine,
       'sourceToExplanation',
-      getCodeExplainerConfig().syncLineOffset,
+      config.syncLineOffset,
       event.textEditor.document.lineCount
     );
     ignoreWebviewScrollUntil = Date.now() + 250;
@@ -619,11 +627,16 @@ function handleSourceSelectionChanged(event: vscode.TextEditorSelectionChangeEve
 function updateActiveLineFromEditor(editor: vscode.TextEditor): void {
   activeSourceEditor = editor;
   activeSourceLine = editor.selection.active.line + 1;
+  if (getCodeExplainerConfig().explanationLevel === 'walkthrough') {
+    activeExplanationPanel?.setActiveLine(activeSourceLine);
+    return;
+  }
   activeExplanationPanel?.setActiveLine(resolveRightPanelAnchorLine(activeSourceLine));
 }
 
 function handleWebviewVisibleLineChanged(line: number): void {
-  if (Date.now() < ignoreWebviewScrollUntil) {
+  const config = getCodeExplainerConfig();
+  if (config.explanationLevel === 'walkthrough' || Date.now() < ignoreWebviewScrollUntil) {
     return;
   }
 
@@ -635,7 +648,7 @@ function handleWebviewVisibleLineChanged(line: number): void {
   const targetLine = mapSyncTargetLine(
     line - 1,
     'explanationToSource',
-    getCodeExplainerConfig().syncLineOffset,
+    config.syncLineOffset,
     sourceEditor.document.lineCount
   );
 
@@ -644,6 +657,10 @@ function handleWebviewVisibleLineChanged(line: number): void {
 }
 
 function handleWebviewActiveLineChanged(line: number): void {
+  if (getCodeExplainerConfig().explanationLevel === 'walkthrough') {
+    return;
+  }
+
   const sourceEditor = findVisibleSourceEditor();
   if (!sourceEditor) {
     return;
@@ -698,11 +715,15 @@ function refreshSettingsDisplay(): void {
   const stored = activeSourceEditor ? store.getBySource(activeSourceEditor.document.uri) : undefined;
   if (stored) {
     activeExplanationPanel?.update(stored, config, getEditorMetrics());
-    activeExplanationPanel?.setActiveLine(resolveRightPanelAnchorLine(activeSourceLine));
+    activeExplanationPanel?.setActiveLine(config.explanationLevel === 'walkthrough' ? activeSourceLine : resolveRightPanelAnchorLine(activeSourceLine));
   }
 }
 
 function resolveRightPanelAnchorLine(sourceLine: number | undefined): number | undefined {
+  if (getCodeExplainerConfig().explanationLevel === 'walkthrough') {
+    return undefined;
+  }
+
   if (sourceLine === undefined || !activeSourceEditor) {
     return sourceLine;
   }
