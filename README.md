@@ -30,9 +30,9 @@ The fixed header helps compensate for source-editor top content such as breadcru
 
 Explanations are streamed into the right pane as chunk objects complete. Tests mock this behavior and never call the OpenAI API.
 
-`codeExplainer.maxChunkLines` defaults to `10`, so even a long function receives periodic flow explanations instead of one giant summary. Medium mode is always capped at 10 source lines per chunk and can show a few important line notes per chunk; concise mode stays summary-only. Detailed mode can show line-level explanations, but blank and comment-only source lines are always kept empty.
+`codeExplainer.maxChunkLines` defaults to `10`, so even a long function receives periodic flow explanations instead of one giant summary. Medium mode is always capped at 10 source lines per chunk and can show a few important line notes per chunk; concise mode stays summary-only. Detailed mode can show line-level explanations, but blank and comment-only source lines are always kept empty. Story mode is capped at 8 source lines per chunk and uses more natural teaching prose for branch behavior, language terms, and success/failure paths.
 
-Long explanation rows are wrapped around 80 characters when there are empty explanation rows below them in the same chunk. Wrapping never spills into the next chunk; if no empty row is available, the remaining text is appended to the chunk tail.
+Long explanation rows are wrapped around 80 characters when there are empty explanation rows below them in the same chunk. Wrapping never spills into the next chunk; if no empty row is available, the remaining text is appended to the chunk tail. This lets story explanations become wider at the end of a chunk instead of losing detail.
 
 Successful explanations are saved under `.code-explainer/explanations/` by default. The folder mirrors your source tree, for example `backend/main.py` becomes `.code-explainer/explanations/backend/main.py.medium.json`. These JSON snapshots include the source hash, model, level, review mode, line-aligned explanation text, and review findings. Fresh snapshots are loaded before calling the API, so teammates can commit the folder and avoid regenerating unchanged explanations.
 

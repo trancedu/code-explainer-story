@@ -1,4 +1,4 @@
-export type ExplanationLevel = 'concise' | 'medium' | 'detailed';
+export type ExplanationLevel = 'concise' | 'medium' | 'detailed' | 'story';
 
 export type ReviewSeverity = 'info' | 'warning' | 'error';
 
@@ -72,4 +72,3 @@ export type ExplanationRequestKey = {
   reviewEnabled: boolean;
   model: string;
 };
-

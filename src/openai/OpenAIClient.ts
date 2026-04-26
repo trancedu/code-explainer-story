@@ -28,6 +28,7 @@ const systemPrompt = [
   'For concise level, write a compact flow summary in each chunk summary and keep lines sparse or empty.',
   'For medium level, every chunk should have a useful multi-clause summary plus two to four line notes for important nontrivial lines when present. Do not narrate every field, import, or simple assignment line.',
   'For detailed level, explain meaningful executable or declarative code lines, but still skip blank and comment-only lines.',
+  'For story level, write natural-language teaching prose for readers who may not know the language well. In the chunk summary, tell the code as a small story: what situation the code is handling, what it checks first, what each branch means, what happens on success and failure, and why difficult terms or syntax matter. Use line notes for important branch, loop, error-handling, type, decorator, and call lines. Keep the prose anchored to the chunk rows and never add newline characters.',
   'Treat adjacent class fields, schema fields, object properties, imports, and constant declarations as a group when possible.',
   'If reviewEnabled is false, return empty review arrays.',
   'If reviewEnabled is true, focus review findings on correctness, security, performance, typing, and maintainability.'
@@ -64,7 +65,7 @@ export class OpenAIClient {
       model: options.model,
       stream,
       reasoning: {
-        effort: payload.reviewEnabled ? 'medium' : 'low'
+        effort: payload.reviewEnabled || payload.explanationLevel === 'story' ? 'medium' : 'low'
       },
       input: [
         {

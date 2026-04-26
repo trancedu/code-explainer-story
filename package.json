@@ -140,7 +140,8 @@
           "enum": [
             "concise",
             "medium",
-            "detailed"
+            "detailed",
+            "story"
           ],
           "default": "medium",
           "description": "How much detail to include in explanations."

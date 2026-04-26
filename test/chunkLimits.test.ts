@@ -12,3 +12,7 @@ test('effectiveMaxChunkLines keeps concise and detailed configurable', () => {
   assert.equal(effectiveMaxChunkLines('detailed', 20), 20);
 });
 
+test('effectiveMaxChunkLines caps story mode at eight lines', () => {
+  assert.equal(effectiveMaxChunkLines('story', 20), 8);
+  assert.equal(effectiveMaxChunkLines('story', 6), 6);
+});

@@ -105,6 +105,50 @@ test('OpenAIClient streams completed chunks before the final JSON closes', async
   assert.equal(result.chunks[0].summary, 'Writes text to the console.');
 });
 
+test('OpenAIClient uses medium reasoning effort for story mode', async () => {
+  let requestBody: any;
+  const client = new OpenAIClient(async (_url, init) => {
+    requestBody = JSON.parse(String(init.body));
+    return jsonResponse({
+      output: [
+        {
+          content: [
+            {
+              type: 'output_text',
+              text: JSON.stringify({
+                fileSummary: 'Explains the flow as a story.',
+                chunks: [
+                  {
+                    id: 'chunk-1-1',
+                    startLine: 1,
+                    endLine: 1,
+                    summary: 'The story begins by logging a greeting.',
+                    lines: [],
+                    review: []
+                  }
+                ]
+              })
+            }
+          ]
+        }
+      ]
+    });
+  });
+
+  await client.generateExplanation(
+    {
+      ...payload,
+      explanationLevel: 'story'
+    },
+    {
+      apiKey: 'sk-test',
+      model: 'gpt-5.4-mini'
+    }
+  );
+
+  assert.equal(requestBody.reasoning.effort, 'medium');
+});
+
 test('extractCompletedChunksFromJsonText ignores incomplete trailing chunks', () => {
   const completeChunk = {
     id: 'chunk-1-1',

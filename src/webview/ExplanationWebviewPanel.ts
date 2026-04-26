@@ -342,6 +342,7 @@ function renderHtml(webview: vscode.Webview, state: WebviewState): string {
       <option value="concise">concise</option>
       <option value="medium">medium</option>
       <option value="detailed">detailed</option>
+      <option value="story">story</option>
     </select></label>
     <button id="review" class="secondary"></button>
     <button id="refresh">Refresh</button>

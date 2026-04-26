@@ -7,6 +7,9 @@ export function effectiveMaxChunkLines(level: ExplanationLevel, configuredMaxChu
     return Math.min(safeConfigured, 10);
   }
 
+  if (level === 'story') {
+    return Math.min(safeConfigured, 8);
+  }
+
   return safeConfigured;
 }
-

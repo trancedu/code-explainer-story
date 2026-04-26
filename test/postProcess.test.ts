@@ -313,6 +313,43 @@ test('renderExplanation appends overflow to the chunk tail when no empty rows re
   assert.match(rendered.lines[1], /summary to wrap/);
 });
 
+test('renderExplanation lets story overflow stay on the final chunk row', () => {
+  const source = [
+    'def choose(value):',
+    '    if value:',
+    '        return "yes"'
+  ].join('\n');
+  const response: ExplanationResponse = {
+    fileSummary: 'Example',
+    chunks: [
+      {
+        id: 'chunk-1-1',
+        startLine: 1,
+        endLine: 3,
+        summary: 'The function starts by receiving a value and then treats that value like a small decision point in the story.',
+        lines: [
+          { line: 2, text: 'The if statement asks whether the value is truthy, which means Python considers it present or meaningful enough to enter the branch.' },
+          { line: 3, text: 'When that branch succeeds, the function immediately returns the yes result to the caller.' }
+        ],
+        review: []
+      }
+    ]
+  };
+
+  const rendered = renderExplanation(3, response, {
+    sourceText: source,
+    languageId: 'python',
+    level: 'story',
+    wrapColumn: 38
+  });
+
+  assert.ok(rendered.lines[0].length <= 38);
+  assert.ok(rendered.lines[1].length <= 38);
+  assert.match(rendered.lines[2], /truthy/);
+  assert.match(rendered.lines[2], /yes result/);
+  assert.ok(rendered.lines[2].length > 38);
+});
+
 test('sanitizeLine collapses all whitespace to one physical line', () => {
   assert.equal(sanitizeLine(' one\n two\t three  '), 'one two three');
 });

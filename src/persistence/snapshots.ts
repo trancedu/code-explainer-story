@@ -156,7 +156,7 @@ export function parseSnapshot(value: unknown): ExplanationSnapshot {
     typeof snapshot.source.languageId !== 'string' ||
     !Number.isInteger(snapshot.source.lineCount) ||
     typeof snapshot.generation.model !== 'string' ||
-    !['concise', 'medium', 'detailed'].includes(snapshot.generation.level) ||
+    !['concise', 'medium', 'detailed', 'story'].includes(snapshot.generation.level) ||
     typeof snapshot.generation.reviewEnabled !== 'boolean' ||
     typeof snapshot.generation.createdAt !== 'string' ||
     typeof snapshot.explanation.fileSummary !== 'string' ||
