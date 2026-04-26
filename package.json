@@ -3,8 +3,16 @@
   "displayName": "Code Explainer",
   "description": "Side-by-side, line-synced code explanations for VS Code.",
   "version": "0.0.10",
-  "publisher": "local",
-  "private": true,
+  "publisher": "trancedu",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trancedu/code-explainer.git"
+  },
+  "homepage": "https://github.com/trancedu/code-explainer#readme",
+  "bugs": {
+    "url": "https://github.com/trancedu/code-explainer/issues"
+  },
   "engines": {
     "vscode": "^1.96.0"
   },
