@@ -121,7 +121,7 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
   }
 
   const document = editor.document;
-  const config = getCodeExplainerConfig();
+  let config = getCodeExplainerConfig();
 
   if (isExcluded(document.uri, config.excludedGlobs)) {
     vscode.window.showWarningMessage('This file matches Code Explainer excludedGlobs.');
@@ -135,9 +135,16 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
     return;
   }
 
+  const setup = await ensureModelAndApiKey(context);
+  if (!setup) {
+    return;
+  }
+  config = setup.config;
+
   const content = document.getText();
   const contentHash = hashText(content);
-  const activeModel = getActiveModel(config);
+  const activeModel = setup.activeModel;
+  const apiKey = setup.apiKey;
   const requestKey = {
     sourceUri: document.uri.toString(),
     documentVersion: document.version,
@@ -172,11 +179,6 @@ async function explainCurrentFile(context: vscode.ExtensionContext, forceRefresh
       await openExplanation(context, editor, stored);
       return;
     }
-  }
-
-  const apiKey = await ensureApiKey(context, config.provider);
-  if (!apiKey) {
-    return;
   }
 
   await vscode.window.withProgress(
@@ -294,7 +296,7 @@ async function openExplanation(
   updateActiveLineFromEditor(sourceEditor);
 }
 
-async function chooseModel(): Promise<void> {
+async function chooseModel(): Promise<boolean> {
   const config = getCodeExplainerConfig();
   const activeModel = getActiveModel(config);
   const presetModels = uniqueNonEmpty([activeModel, ...getActiveModelPresets(config)]);
@@ -317,7 +319,7 @@ async function chooseModel(): Promise<void> {
   );
 
   if (!selected) {
-    return;
+    return false;
   }
 
   let nextModel = selected.label;
@@ -330,7 +332,7 @@ async function chooseModel(): Promise<void> {
       validateInput: (input) => (input.trim() ? undefined : 'Enter a non-empty model id.')
     });
     if (!custom) {
-      return;
+      return false;
     }
     nextModel = custom.trim();
   }
@@ -338,6 +340,7 @@ async function chooseModel(): Promise<void> {
   await setModel(nextModel);
   refreshSettingsDisplay();
   vscode.window.showInformationMessage(`Code Explainer model set to ${nextModel} (${providerDisplayName(providerForModel(nextModel))}).`);
+  return true;
 }
 
 async function toggleInlineExplanations(): Promise<void> {
@@ -442,6 +445,32 @@ async function ensureApiKey(context: vscode.ExtensionContext, provider: LLMProvi
     title: `Code Explainer: ${providerDisplayName(provider)} API Key Required`,
     prompt: `Enter your ${providerDisplayName(provider)} API key to generate explanations. It will be stored in VS Code SecretStorage.`
   });
+}
+
+async function ensureModelAndApiKey(
+  context: vscode.ExtensionContext
+): Promise<{ config: ReturnType<typeof getCodeExplainerConfig>; activeModel: string; apiKey: string } | undefined> {
+  let config = getCodeExplainerConfig();
+  let apiKey = await resolveApiKey(context, config.provider);
+
+  if (!apiKey) {
+    const didChooseModel = await chooseModel();
+    if (!didChooseModel) {
+      return undefined;
+    }
+    config = getCodeExplainerConfig();
+  }
+
+  apiKey = await ensureApiKey(context, config.provider);
+  if (!apiKey) {
+    return undefined;
+  }
+
+  return {
+    config,
+    activeModel: getActiveModel(config),
+    apiKey
+  };
 }
 
 async function promptForApiKey(

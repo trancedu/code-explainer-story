@@ -52,13 +52,17 @@ When a saved source file has an existing in-memory explanation or snapshot, Code
 
 ## API Key
 
-Use `Code Explainer: Set Model` to choose the generation model. Model ids starting with `claude` use Anthropic; `gpt` and other model ids use OpenAI.
+Use `Code Explainer: Set Model` to choose the generation model. Model ids starting with `claude` use Anthropic; `gpt` and other model ids use OpenAI. The first time you explain a file without a saved key, Code Explainer asks you to choose the model before it asks for the matching provider key.
 
 Use `Code Explainer: Set OpenAI API Key` or `Code Explainer: Set Anthropic API Key` to store your key in VS Code SecretStorage. If no key is configured, the first command that needs generation asks for the key required by the chosen model and then continues. For local extension development only, the extension also reads `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `CLAUDE_API_KEY` from `.env` in the extension folder.
 
 `codeExplainer.model` defaults to `gpt-5.4-mini`, and `codeExplainer.modelPresets` includes `claude-sonnet-4-6`. Use `Code Explainer: Set Model` to pick a preset or enter a custom model id.
 
 The `.env` file is ignored by git.
+
+## Privacy
+
+Code Explainer sends source code only to the provider selected by your current model routing. File explanations send the file content as numbered chunks to OpenAI or Anthropic. Follow-up questions send the full current file, the selected line or chunk range, and your question so the model has enough context to answer. API keys are stored in VS Code SecretStorage and are redacted from provider error messages before those errors are shown. The extension does not intentionally log API keys or source code.
 
 ## Custom Model Providers
 
