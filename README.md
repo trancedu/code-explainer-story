@@ -1,8 +1,8 @@
-# Code Explainer
+# Code Explainer Story
 
-Code Explainer opens a source file beside a generated English explanation. The source stays in the normal VS Code editor, while the explanation appears in a right-side panel with a fixed settings header and a scrollable line-by-line explanation. Line 100 on the left maps to line 100 on the right, and vertical scrolling is synchronized both ways.
+Code Explainer Story opens a source file beside a generated English explanation. The source stays in the normal VS Code editor, while the explanation appears in a right-side panel with a fixed settings header and a scrollable line-by-line explanation. Line 100 on the left maps to line 100 on the right, and vertical scrolling is synchronized both ways.
 
-Repository: https://github.com/trancedu/code-explainer
+Repository: https://github.com/trancedu/code-explainer-story
 
 ## Commands
 
