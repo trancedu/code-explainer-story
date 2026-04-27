@@ -154,7 +154,7 @@
         },
         "codeExplainer.inline.enabled": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Show generated explanations near source code with hover text and short end-of-line decorations."
         },
         "codeExplainer.inline.maxHints": {

@@ -37,7 +37,7 @@ export function getCodeExplainerConfig(): CodeExplainerConfig {
     modelPresets: config.get<string[]>('modelPresets', defaultModelPresets),
     explanationLevel: levels.has(level as ExplanationLevel) ? (level as ExplanationLevel) : 'medium',
     reviewEnabled: config.get<boolean>('reviewEnabled', false),
-    inlineEnabled: config.get<boolean>('inline.enabled', false),
+    inlineEnabled: config.get<boolean>('inline.enabled', true),
     inlineMaxHints: config.get<number>('inline.maxHints', 0),
     inlineMaxTextLength: config.get<number>('inline.maxTextLength', 96),
     inlineMaxCodeColumns: config.get<number>('inline.maxCodeColumns', 100),
