@@ -3,7 +3,7 @@
   "displayName": "Code Explainer",
   "description": "Side-by-side, line-synced code explanations for VS Code.",
   "version": "0.0.10",
-  "publisher": "trancedu",
+  "publisher": "TranceDu",
   "license": "MIT",
   "repository": {
     "type": "git",
