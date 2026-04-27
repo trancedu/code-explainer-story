@@ -1,6 +1,6 @@
 {
-  "name": "code-explainer",
-  "displayName": "Code Explainer",
+  "name": "code-explainer-story",
+  "displayName": "Code Explainer Story",
   "description": "Side-by-side, line-synced code explanations for VS Code.",
   "version": "0.0.10",
   "publisher": "TranceDu",
